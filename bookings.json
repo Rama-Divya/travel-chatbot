@@ -11,6 +11,36 @@
       "departure": "02:00 PM",
       "arrival": "06:30 PM",
       "price": "$320"
+    },
+    {
+      "id": "93AA81A2",
+      "type": "hotel",
+      "user": "Vikram",
+      "date": "Today",
+      "hotel": "Grand Hyderabad Hotel",
+      "city": "Hyderabad",
+      "price": "$150/night"
+    },
+    {
+      "id": "FB53131B",
+      "type": "hotel",
+      "user": "Sneha",
+      "date": "Today",
+      "hotel": "Paris Plaza",
+      "city": "Paris",
+      "price": "$200/night"
+    },
+    {
+      "id": "E74D1E95",
+      "type": "flight",
+      "user": "Vikram",
+      "date": "Today",
+      "airline": "Global Airways",
+      "flight_number": "GA417",
+      "destination": "Flight",
+      "departure": "02:00 PM",
+      "arrival": "06:30 PM",
+      "price": "$320"
     }
   ]
 }

@@ -1,0 +1,142 @@
+{
+    "Hyderabad": [
+        "Charminar",
+        "Golconda Fort",
+        "Ramoji Film City",
+        "Hussain Sagar Lake",
+        "Salar Jung Museum"
+    ],
+    "Mumbai": [
+        "Gateway of India",
+        "Marine Drive",
+        "Elephanta Caves",
+        "Juhu Beach",
+        "Chhatrapati Shivaji Maharaj Terminus"
+    ],
+    "Delhi": [
+        "Red Fort",
+        "Qutub Minar",
+        "India Gate",
+        "Lotus Temple",
+        "Humayun's Tomb"
+    ],
+    "Chennai": [
+        "Marina Beach",
+        "Kapaleeshwarar Temple",
+        "Fort St. George",
+        "Vivekananda House",
+        "Guindy National Park"
+    ],
+    "Kolkata": [
+        "Victoria Memorial",
+        "Howrah Bridge",
+        "Dakshineswar Kali Temple",
+        "Indian Museum",
+        "Eco Park"
+    ],
+    "Bangalore": [
+        "Lalbagh Botanical Garden",
+        "Cubbon Park",
+        "Bangalore Palace",
+        "ISKCON Temple",
+        "Bannerghatta National Park"
+    ],
+    "Ahmedabad": [
+        "Sabarmati Ashram",
+        "Kankaria Lake",
+        "Adalaj Stepwell",
+        "Sidi Saiyyed Mosque",
+        "Science City"
+    ],
+    "Jaipur": [
+        "Hawa Mahal",
+        "Amber Fort",
+        "City Palace",
+        "Jantar Mantar",
+        "Nahargarh Fort"
+    ],
+    "Pune": [
+        "Shaniwar Wada",
+        "Aga Khan Palace",
+        "Sinhagad Fort",
+        "Raja Dinkar Kelkar Museum",
+        "Pataleshwar Cave Temple"
+    ],
+    "Goa": [
+        "Calangute Beach",
+        "Fort Aguada",
+        "Basilica of Bom Jesus",
+        "Anjuna Beach",
+        "Dudhsagar Falls"
+    ],
+    "Paris": [
+        "Eiffel Tower",
+        "Louvre Museum",
+        "Notre-Dame Cathedral",
+        "Champs-\u00c9lys\u00e9es",
+        "Sainte-Chapelle"
+    ],
+    "London": [
+        "Big Ben",
+        "London Eye",
+        "Tower Bridge",
+        "Buckingham Palace",
+        "British Museum"
+    ],
+    "New York": [
+        "Statue of Liberty",
+        "Central Park",
+        "Empire State Building",
+        "Times Square",
+        "Metropolitan Museum of Art"
+    ],
+    "Dubai": [
+        "Burj Khalifa",
+        "Dubai Mall",
+        "Palm Jumeirah",
+        "Dubai Marina",
+        "Desert Safari"
+    ],
+    "Singapore": [
+        "Marina Bay Sands",
+        "Gardens by the Bay",
+        "Sentosa Island",
+        "Singapore Flyer",
+        "Merlion Park"
+    ],
+    "Tokyo": [
+        "Tokyo Tower",
+        "Senso-ji Temple",
+        "Shinjuku Gyoen",
+        "Tokyo Disneyland",
+        "Meiji Shrine"
+    ],
+    "Bangkok": [
+        "Grand Palace",
+        "Wat Arun",
+        "Chatuchak Market",
+        "Safari World",
+        "MBK Center"
+    ],
+    "Rome": [
+        "Colosseum",
+        "Pantheon",
+        "Trevi Fountain",
+        "Roman Forum",
+        "Vatican Museums"
+    ],
+    "Barcelona": [
+        "Sagrada Fam\u00edlia",
+        "Park G\u00fcell",
+        "La Rambla",
+        "Casa Batll\u00f3",
+        "Gothic Quarter"
+    ],
+    "Istanbul": [
+        "Hagia Sophia",
+        "Blue Mosque",
+        "Topkapi Palace",
+        "Grand Bazaar",
+        "Basilica Cistern"
+    ]
+}

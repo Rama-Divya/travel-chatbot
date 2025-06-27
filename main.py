@@ -6,13 +6,9 @@ from booking_system import save_booking, load_bookings
 from places import get_top_attractions
 from uuid import uuid4
 
-# Google API key for places
-GOOGLE_API_KEY = "AIzaSyBd8aydUboM4gf82uyCtFpVTu4sc1"
-
 engine = pyttsx3.init()
 
 def get_hotel_options(city):
-    """Mock hotel data - replace with real API calls"""
     mock_hotels = [
         {
             "name": f"Grand {city} Hotel",
@@ -36,7 +32,6 @@ def get_hotel_options(city):
     return mock_hotels
 
 def get_flight_options(destination):
-    """Mock flight data - replace with real API calls"""
     mock_flights = [
         {
             "airline": "SkyHigh Airlines",
@@ -91,7 +86,7 @@ def extract_city(text):
 def ask_for_booking(item_type, item_data, city):
     speak_output(f"Do you want to book this {item_type}? Say yes or no.")
     response = get_voice_input("Say yes to confirm booking.")
-    
+
     if "yes" in response.lower():
         name = get_voice_input("Please say your name for booking.")
         booking = {
@@ -100,7 +95,7 @@ def ask_for_booking(item_type, item_data, city):
             "user": name,
             "date": "Today",
         }
-        
+
         if item_type == "hotel":
             booking.update({
                 "hotel": item_data['name'],
@@ -116,7 +111,7 @@ def ask_for_booking(item_type, item_data, city):
                 "arrival": item_data.get('arrival', 'N/A'),
                 "price": item_data.get('price', 'N/A')
             })
-        
+
         result = save_booking(booking)
         speak_output(result)
         print(result)
@@ -142,24 +137,24 @@ def handle_query(text):
             hotels = get_hotel_options(city)
             if not hotels:
                 return f"No hotels found in {city}."
-                
+
             result = f"Top hotels in {city}:\n"
             for i, hotel in enumerate(hotels[:3], 1):
                 result += f"{i}. {hotel['name']} - {hotel['price']} - {hotel['rating']}⭐\n"
-            
+
             speak_output(f"Found hotels in {city}. Here are top options.")
             print(result)
-            
+
             speak_output("Which hotel would you like? Say 1, 2, or 3.")
             choice = get_voice_input("Select hotel by number")
-            
+
             try:
                 choice_idx = int(choice.strip()) - 1
                 selected_hotel = hotels[choice_idx]
             except (ValueError, IndexError):
                 speak_output("Booking the top recommendation.")
                 selected_hotel = hotels[0]
-            
+
             return ask_for_booking("hotel", selected_hotel, city)
         else:
             return "Please specify a city for hotels."
@@ -171,44 +166,45 @@ def handle_query(text):
             flights = get_flight_options(city)
             if not flights:
                 return f"No flights available to {city}."
-                
+
             result = f"Flights to {city}:\n"
             for i, flight in enumerate(flights[:3], 1):
                 result += (f"{i}. {flight['airline']} {flight['flight_number']}\n"
-                         f"   Depart: {flight['departure']} | Arrive: {flight['arrival']}\n"
-                         f"   Price: {flight['price']}\n")
-            
+                           f"   Depart: {flight['departure']} | Arrive: {flight['arrival']}\n"
+                           f"   Duration: {flight['duration']} | Price: {flight['price']}\n")
+
             speak_output(f"Found flights to {city}. Here are options:")
             print(result)
-            
+
             speak_output("Which flight would you prefer? Say 1, 2, or 3.")
             choice = get_voice_input("Select flight by number")
-            
+
             try:
                 choice_idx = int(choice.strip()) - 1
                 selected_flight = flights[choice_idx]
             except (ValueError, IndexError):
                 speak_output("Booking the first available flight.")
                 selected_flight = flights[0]
-            
+
             return ask_for_booking("flight", selected_flight, city)
         else:
             return "Please specify a destination city."
 
     elif "places" in text or "attractions" in text:
-        if not city:
-            city = extract_city(get_voice_input("Which city's attractions interest you?"))
+        if city is None or city.lower() in ["places", "attractions"]:
+            city_input = get_voice_input("Please say the city you want to explore.")
+            city = extract_city(city_input)
         if city:
-            places = get_top_attractions(city, GOOGLE_API_KEY)
+            places = get_top_attractions(city)
             return f"Top attractions in {city}:\n" + "\n".join(places)
         else:
-            return "No city provided for attractions."
-    
+            return "No valid city provided to find attractions."
+
     elif "my bookings" in text or "reservations" in text:
         bookings = load_bookings()
         if not bookings:
             return "You have no bookings yet."
-        
+
         result = "Your Bookings:\n" + "="*50 + "\n"
         for booking in bookings:
             if booking['type'] == 'hotel':
@@ -238,7 +234,7 @@ def main():
         if "exit" in spoken.lower() or "quit" in spoken.lower():
             speak_output("Goodbye! Happy travels!")
             break
-            
+
         print(f"🗣️ You said: {spoken}")
         response = handle_query(spoken)
         print("💬", response)

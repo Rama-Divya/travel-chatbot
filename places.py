@@ -1,19 +1,16 @@
-import requests
+import json
+import os
 
-def get_top_attractions(city, api_key):
+def get_top_attractions(city):
     try:
-        url = "https://maps.googleapis.com/maps/api/place/textsearch/json"
-        params = {
-            "query": f"top tourist attractions in {city}",
-            "key": "AIzaSyBd8aydUboM4gf82uyCtFpVTu4sc17fRIY"
-        }
-        response = requests.get(url, params=params)
-        data = response.json()
-
-        if "results" in data:
-            top_places = [place["name"] for place in data["results"][:5]]
-            return top_places
+        file_path = os.path.join(os.path.dirname(__file__), "attractions_data.json")
+        with open(file_path, "r", encoding="utf-8") as f:
+            attractions = json.load(f)
+        
+        city = city.title()
+        if city in attractions:
+            return attractions[city][:5]
         else:
-            return ["No attractions found or error occurred."]
+            return [f"No data found for {city}. Try another city."]
     except Exception as e:
-        return [f"API error: {str(e)}"]
+        return [f"Error loading attractions: {str(e)}"]
