@@ -1,0 +1,16 @@
+{
+  "bookings": [
+    {
+      "id": "E2F0A4EE",
+      "type": "flight",
+      "user": "Divya",
+      "date": "Today",
+      "airline": "Global Airways",
+      "flight_number": "GA690",
+      "destination": "Hyderabad",
+      "departure": "02:00 PM",
+      "arrival": "06:30 PM",
+      "price": "$320"
+    }
+  ]
+}
