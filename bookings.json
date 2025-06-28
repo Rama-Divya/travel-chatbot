@@ -41,6 +41,48 @@
       "departure": "02:00 PM",
       "arrival": "06:30 PM",
       "price": "$320"
+    },
+    {
+      "id": "933C9643",
+      "type": "flight",
+      "user": "Aditi",
+      "date": "Today",
+      "airline": "SkyHigh Airlines",
+      "flight_number": "SH328",
+      "destination": "Hyderabad",
+      "departure": "08:00 AM",
+      "arrival": "11:00 AM",
+      "price": "$250"
+    },
+    {
+      "id": "A67C0FB9",
+      "type": "hotel",
+      "user": "VikramSinghChauhan",
+      "date": "Today",
+      "hotel": "Grand Paris Hotel",
+      "city": "Paris",
+      "price": "$150/night"
+    },
+    {
+      "id": "6BE1E2F5",
+      "type": "flight",
+      "user": "AditiSharma",
+      "date": "Today",
+      "airline": "Global Airways",
+      "flight_number": "GA437",
+      "destination": "Hyderabad",
+      "departure": "02:00 PM",
+      "arrival": "06:30 PM",
+      "price": "$320"
+    },
+    {
+      "id": "8FCA56FE",
+      "type": "hotel",
+      "user": "Sia",
+      "date": "Today",
+      "hotel": "Goa Plaza",
+      "city": "Goa",
+      "price": "$200/night"
     }
   ]
 }
