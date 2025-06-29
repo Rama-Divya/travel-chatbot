@@ -1,376 +1,320 @@
 import speech_recognition as sr
 import pyttsx3
 import re
-from weather import get_weather
-from booking_system import save_booking, load_bookings
-from places import get_top_attractions
+import json
+import os
 from uuid import uuid4
+from weather import get_weather
+from places import get_top_attractions
 
+# Initialize text-to-speech engine
 engine = pyttsx3.init()
-engine.setProperty('rate', 150)  # Slower speech rate for better understanding
+engine.setProperty('rate', 150)
 
+# Database setup
+DATABASE_FILE = "bookings.json"
+
+def init_db():
+    if not os.path.exists(DATABASE_FILE):
+        with open(DATABASE_FILE, 'w') as f:
+            json.dump({"bookings": []}, f)
+
+def load_bookings():
+    try:
+        with open(DATABASE_FILE, 'r') as f:
+            return json.load(f)["bookings"]
+    except (FileNotFoundError, json.JSONDecodeError):
+        return []
+
+def save_booking(booking):
+    init_db()
+    bookings = load_bookings()
+    bookings.append(booking)
+    with open(DATABASE_FILE, 'w') as f:
+        json.dump({"bookings": bookings}, f, indent=2)
+    return generate_confirmation(booking)
+
+def generate_confirmation(booking):
+    details = ""
+    if booking['type'] == 'hotel':
+        details = f"Hotel: {booking['hotel']} in {booking['city']}"
+    elif booking['type'] == 'flight':
+        details = f"Flight: {booking['airline']} to {booking['destination']}"
+    
+    return (
+        f"✅ Booking confirmed!\n"
+        f"Confirmation ID: {booking['id']}\n"
+        f"Name: {booking['user']}\n"
+        f"Type: {booking['type'].title()}\n"
+        f"{details}\n"
+        f"Date: {booking['date']}\n"
+        "Thank you for choosing our service!"
+    )
+
+# Number mappings for voice commands
+NUMBER_WORDS = {
+    "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+    "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+    "first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5,
+    "1": 1, "2": 2, "3": 3, "4": 4, "5": 5, "6": 6, "7": 7, "8": 8, "9": 9, "10": 10
+}
+
+YES_NO_WORDS = ["yes", "no", "yeah", "nah", "yep", "nope"]
+
+ORDINAL_WORDS = {
+    1: "first", 2: "second", 3: "third", 4: "fourth", 5: "fifth"
+}
+
+# Hotel and flight data providers
 def get_hotel_options(city):
     if not city:
         return []
-    mock_hotels = [
-        {
-            "name": f"Grand {city} Hotel",
-            "price": "$150/night",
-            "rating": 4.5,
-            "address": f"123 Main St, {city}"
-        },
-        {
-            "name": f"{city} Plaza",
-            "price": "$200/night",
-            "rating": 4.2,
-            "address": f"456 Center Ave, {city}"
-        },
-        {
-            "name": f"Cozy {city} Inn",
-            "price": "$120/night",
-            "rating": 3.9,
-            "address": f"789 Side Rd, {city}"
-        }
+    return [
+        {"name": f"Grand {city} Hotel", "price": "$150/night", "rating": 4.5, "address": f"123 Main St, {city}"},
+        {"name": f"{city} Plaza", "price": "$200/night", "rating": 4.2, "address": f"456 Center Ave, {city}"},
+        {"name": f"Cozy {city} Inn", "price": "$120/night", "rating": 3.9, "address": f"789 Side Rd, {city}"}
     ]
-    return mock_hotels
 
 def get_flight_options(destination):
     if not destination:
         return []
-    mock_flights = [
-        {
-            "airline": "SkyHigh Airlines",
-            "flight_number": "SH" + str(100 + hash(destination) % 900),
-            "departure": "08:00 AM",
-            "arrival": "11:00 AM",
-            "duration": "3h",
-            "price": "$250"
-        },
-        {
-            "airline": "Global Airways",
-            "flight_number": "GA" + str(200 + hash(destination) % 800),
-            "departure": "02:00 PM",
-            "arrival": "06:30 PM",
-            "duration": "4h 30m",
-            "price": "$320"
-        }
+    return [
+        {"airline": "SkyHigh Airlines", "departure": "08:00 AM", "arrival": "11:00 AM", "duration": "3h", "price": "$250"},
+        {"airline": "Global Airways", "departure": "02:00 PM", "arrival": "06:30 PM", "duration": "4h 30m", "price": "$320"}
     ]
-    return mock_flights
 
+# Voice input/output functions
 def speak_output(text):
-    print(f"Assistant: {text}")  # Add logging
+    print(f"Assistant: {text}")
     engine.say(text)
     engine.runAndWait()
 
+def list_options(options_list, item_type, city):
+    options_text = f"Here are the available {item_type} options in {city}:\n"
+    for i, option in enumerate(options_list, 1):
+        if item_type == "hotel":
+            options_text += f"{ORDINAL_WORDS.get(i, str(i))}. {option['name']} - {option['price']} - Rating: {option['rating']}\n"
+        elif item_type == "flight":
+            options_text += f"{ORDINAL_WORDS.get(i, str(i))}. {option['airline']} - Departs at {option['departure']} for {option['price']}\n"
+    return options_text
+
+# Improved city extraction with multi-word support
 def extract_city(text):
-    """Improved city extraction"""
     if not text:
         return None
     
-    # More robust patterns
     patterns = [
-        r"\b(?:in|at|for|near|to)\s+([a-zA-Z\s]+?)\b",
+        r"\b(?:in|at|for|near|to)\s+([a-zA-Z\s]{3,})\b",
         r"\b(?:hotels?|flights?|weather|places?|attractions?)\s+(?:in|at|for|near|to)?\s*([a-zA-Z\s]+)\b",
         r"\b(?:book|find|show)\s+(?:a\s+)?(?:hotel|flight)\s+(?:in|at|for|near|to)?\s*([a-zA-Z\s]+)\b",
-        r"\b([A-Z][a-zA-Z]{3,})\b"  # Standalone city names
+        r"\b([A-Z][a-zA-Z\s]{3,})\b"
     ]
     
     for pattern in patterns:
-        match = re.search(pattern, text, re.IGNORECASE)
-        if match:
+        matches = re.finditer(pattern, text, re.IGNORECASE)
+        for match in matches:
             city = match.group(1).strip()
-            city = re.sub(r'\b(?:please|today|now|book|find|show)\b', '', city, flags=re.IGNORECASE).strip()
-            if city:
+            city = re.sub(r'\b(?:please|today|now|book|find|show|attractions?|places?)\b', '', city, flags=re.IGNORECASE).strip()
+            city = re.sub(r'\s+\b(?:in|at|for|near|to)\b$', '', city, flags=re.IGNORECASE).strip()
+            if city and len(city) > 2:  # Filter out short invalid matches
                 return city.title()
     return None
 
-def get_voice_input(prompt="Speak now...", max_attempts=2):
+def get_voice_input(prompt="Speak now...", max_attempts=3, expected=None):
     recognizer = sr.Recognizer()
     for attempt in range(max_attempts):
         with sr.Microphone() as source:
             print(f"🎤 {prompt} (Attempt {attempt + 1} of {max_attempts})")
-            recognizer.adjust_for_ambient_noise(source)
+            recognizer.adjust_for_ambient_noise(source, duration=1)
             try:
-                audio = recognizer.listen(source, timeout=5, phrase_time_limit=5)
-                text = recognizer.recognize_google(audio)
+                audio = recognizer.listen(source, timeout=10, phrase_time_limit=5)
+                text = recognizer.recognize_google(audio).lower()
+                print(f"🗣️ You said: {text}")
+                
+                if expected:
+                    for word in expected:
+                        if word.lower() in text.split() or word.lower() == text:
+                            return word.lower()
+                    # Check for partial matches
+                    for word in expected:
+                        if any(part.lower() == word.lower() for part in text.split()):
+                            return word.lower()
+                    continue
                 return text
-            except (sr.UnknownValueError, sr.RequestError) as e:
-                print(f"Voice recognition error: {str(e)}")
+            except sr.UnknownValueError:
+                print("Could not understand audio.")
                 speak_output("Sorry, I didn't catch that. Please try again.")
-    return None
+            except sr.RequestError as e:
+                print(f"Could not request results; {e}")
+                speak_output("There was an error with the speech recognition service.")
+            except sr.WaitTimeoutError:
+                print("Listening timed out.")
+                speak_output("I didn't hear anything. Please try again.")
+    
+    speak_output("Switching to text input for this step.")
+    return input("✍️ Please type your response: ").lower()
 
+def convert_to_number(word):
+    return NUMBER_WORDS.get(word.strip().lower(), None) if word else None
+
+# Booking workflow
 def ask_for_booking(item_type, item_data, city, is_voice=False):
     if is_voice:
-        speak_output(f"Do you want to book this {item_type}? Say yes or no.")
-        response = get_voice_input("Say yes to confirm booking.")
+        speak_output(f"Do you want to book this {item_type}? Please say yes or no.")
+        response = get_voice_input("Confirm booking?", expected=YES_NO_WORDS)
     else:
-        return f"Reply 'yes' to book {item_type} at {item_data['name']} in {city}"
+        response = "no"
 
-    if response and "yes" in response.lower():
-        if is_voice:
-            name = get_voice_input("Please say your name for booking.")
-        else:
-            return "Please provide your name for booking"
-        
-        if not name:
-            return "Booking cancelled. No name provided."
+    if response in YES_NO_WORDS:
+        if response == "yes":
+            if not city:
+                speak_output("Please say the city name for the booking.")
+                city = get_voice_input("Say the city name")
+                city = extract_city(city) or city
             
-        booking = {
-            "id": str(uuid4())[:8].upper(),
-            "type": item_type,
-            "user": name,
-            "date": "Today",
-        }
+            name = get_voice_input("Please say your full name for the booking.") if is_voice else input("Enter your full name: ")
+            if not name:
+                return "Booking cancelled. No name provided."
+            
+            booking = {
+                "id": str(uuid4())[:8].upper(),
+                "type": item_type,
+                "user": name,
+                "date": "Today"
+            }
+            
+            if item_type == "hotel":
+                booking.update({
+                    "hotel": item_data['name'], 
+                    "city": city, 
+                    "price": item_data.get('price', 'N/A')
+                })
+            elif item_type == "flight":
+                booking.update({
+                    "airline": item_data['airline'], 
+                    "destination": city, 
+                    "departure": item_data.get('departure', 'N/A'),
+                    "price": item_data.get('price', 'N/A')
+                })
+            
+            result = save_booking(booking)
+            if is_voice:
+                speak_output(result)
+            return result
+        return "Booking cancelled."
+    return "Invalid response. Booking cancelled."
 
-        if item_type == "hotel":
-            booking.update({
-                "hotel": item_data['name'],
-                "city": city,
-                "price": item_data.get('price', 'N/A')
-            })
-        elif item_type == "flight":
-            booking.update({
-                "airline": item_data['airline'],
-                "flight_number": item_data.get("flight_number", "N/A"),
-                "destination": city,
-                "departure": item_data.get('departure', 'N/A'),
-                "arrival": item_data.get('arrival', 'N/A'),
-                "price": item_data.get('price', 'N/A')
-            })
-
-        result = save_booking(booking)
-        if is_voice:
-            speak_output(result)
-        return result
-    return "Booking cancelled."
-
-def process_booking_command(text, is_voice=False):
-    """Process booking commands in the format: book flight 1 to Paris for John Doe"""
-    match = re.match(r"book\s+(flight|hotel)\s+(\d+)\s+to\s+([a-zA-Z\s]+)\s+for\s+([a-zA-Z\s]+)", text, re.IGNORECASE)
-    if not match:
-        return "Invalid booking format. Use: 'book flight/hotel [number] to [city] for [name]'"
+def handle_number_selection(options, item_type, city, is_voice):
+    options_text = list_options(options, item_type, city)
+    speak_output(options_text)
     
-    item_type = match.group(1).lower()
-    choice = int(match.group(2))
-    city = match.group(3).strip().title()
-    name = match.group(4).strip()
+    valid_choices = list(ORDINAL_WORDS.values())[:len(options)] + [str(i) for i in range(1, len(options)+1)] + ["cancel"]
+    prompt = f"Please say {ORDINAL_WORDS.get(1, 'first')} through {ORDINAL_WORDS.get(len(options), str(len(options)))} or 'cancel'"
+    speak_output(prompt)
     
-    # Get the options
-    if item_type == "flight":
-        options = get_flight_options(city)
-    elif item_type == "hotel":
-        options = get_hotel_options(city)
+    choice = get_voice_input("Select option", expected=valid_choices)
+    
+    if choice == "cancel":
+        return "Selection cancelled."
+    
+    choice_num = convert_to_number(choice)
+    if choice_num is not None and 1 <= choice_num <= len(options):
+        selected = options[choice_num - 1]
     else:
-        return f"Invalid item type: {item_type}"
+        speak_output("I'll select the first option for you.")
+        selected = options[0]
     
-    if not options:
-        return f"No {item_type} options found for {city}."
-    
-    # Validate choice number
-    if choice < 1 or choice > len(options):
-        return f"Invalid choice number. Please select between 1 and {len(options)}"
-    
-    selected = options[choice-1]
-    
-    # Create the booking
-    booking = {
-        "id": str(uuid4())[:8].upper(),
-        "type": item_type,
-        "user": name,
-        "date": "Today",
-    }
+    return ask_for_booking(item_type, selected, city, is_voice)
 
-    if item_type == "hotel":
-        booking.update({
-            "hotel": selected['name'],
-            "city": city,
-            "price": selected.get('price', 'N/A')
-        })
-    elif item_type == "flight":
-        booking.update({
-            "airline": selected['airline'],
-            "flight_number": selected.get("flight_number", "N/A"),
-            "destination": city,
-            "departure": selected.get('departure', 'N/A'),
-            "arrival": selected.get('arrival', 'N/A'),
-            "price": selected.get('price', 'N/A')
-        })
-
-    result = save_booking(booking)
-    if is_voice:
-        speak_output(result)
-    return result
-
+# Main query handler
 def handle_query(text, is_voice=False):
-    """Handle queries for both CLI and Gradio interfaces"""
     if not text:
         return "Please provide a query"
-        
-    # First check if it's a booking command
-    if re.match(r"book\s+(flight|hotel)\s+(\d+)\s+to\s+([a-zA-Z\s]+)\s+for\s+([a-zA-Z\s]+)", text, re.IGNORECASE):
-        return process_booking_command(text, is_voice)
-        
-    original_text = text
+    
     text_lower = text.lower()
-    city = extract_city(original_text)
-    
-    # Help command
-    if "help" in text_lower or "what can you do" in text_lower:
-        help_msg = ("I can help with:\n"
-                   "- Weather forecasts (e.g., 'weather in London')\n"
-                   "- Hotel bookings (e.g., 'hotels in Paris')\n"
-                   "- Flight information (e.g., 'flights to Tokyo')\n"
-                   "- Tourist attractions (e.g., 'places in Rome')\n"
-                   "- Your bookings (e.g., 'show my bookings')")
-        return help_msg
-    
-    # Weather
+    city = extract_city(text)
+
+    # Weather queries
     if "weather" in text_lower:
-        if not city:
-            if is_voice:
-                # Ask for city explicitly
-                speak_output("Which city's weather would you like to know?")
-                city_text = get_voice_input("Say the city name")
-                city = extract_city(city_text) if city_text else None
-            if not city:
-                return "Please specify a city for weather information."
-        return get_weather(city)
-    
-    # Hotels
-    elif "hotel" in text_lower or "stay" in text_lower or "accommodation" in text_lower:
-        if not city:
-            if is_voice:
-                # Ask for city explicitly
-                speak_output("Which city are you looking for hotels in?")
-                city_text = get_voice_input("Say the city name")
-                city = extract_city(city_text) if city_text else None
-            if not city:
-                return "Please specify a city for hotel options."
-        
+        if not city and is_voice:
+            speak_output("Which city's weather would you like to know?")
+            city = extract_city(get_voice_input("Say city name"))
+        return get_weather(city) if city else "City not recognized."
+
+    # Hotel queries
+    if any(k in text_lower for k in ["hotel", "stay", "accommodation"]):
+        if not city and is_voice:
+            speak_output("Which city would you like hotels in?")
+            city = extract_city(get_voice_input("Say city name"))
         hotels = get_hotel_options(city)
         if not hotels:
-            return f"No hotels found in {city}."
-        
-        result = f"🏨 Hotels in {city}:\n" + "\n".join(
-            [f"{i}. {h['name']} - {h['price']} - Rating: {h['rating']}⭐" 
-             for i, h in enumerate(hotels[:3], 1)])
-        
+            return f"No hotels in {city}."
         if is_voice:
-            speak_output(f"Found hotels in {city}. Here are top options:")
-            print(result)
-            speak_output("Which hotel would you like? Say 1, 2, or 3.")
-            choice = get_voice_input("Select hotel by number")
-            try:
-                choice_idx = int(choice.strip()) - 1
-                selected_hotel = hotels[choice_idx]
-            except (ValueError, IndexError):
-                speak_output("Booking the top recommendation.")
-                selected_hotel = hotels[0]
-            return ask_for_booking("hotel", selected_hotel, city, is_voice)
-        else:
-            return result + "\n\nTo book, use command: 'book hotel [number] to [city] for [your name]'"
-    
-    # Flights
-    elif "flight" in text_lower or "fly" in text_lower or "airline" in text_lower:
-        if not city:
-            if is_voice:
-                # Ask for city explicitly
-                speak_output("Where would you like to fly to?")
-                city_text = get_voice_input("Say the destination city")
-                city = extract_city(city_text) if city_text else None
-            if not city:
-                return "Please specify a destination city."
-        
+            return handle_number_selection(hotels, "hotel", city, is_voice)
+        return list_options(hotels, "hotel", city)
+
+    # Flight queries
+    if any(k in text_lower for k in ["flight", "airline", "fly"]):
+        if not city and is_voice:
+            speak_output("Which city would you like to fly to?")
+            city = extract_city(get_voice_input("Say city name"))
         flights = get_flight_options(city)
         if not flights:
-            return f"No flights available to {city}."
-        
-        result = f"✈️ Flights to {city}:\n" + "\n".join(
-            [f"{i}. {f['airline']} {f['flight_number']}\n"
-             f"   Depart: {f['departure']} | Arrive: {f['arrival']}\n"
-             f"   Duration: {f['duration']} | Price: {f['price']}"
-             for i, f in enumerate(flights[:3], 1)])
-        
+            return f"No flights to {city}."
         if is_voice:
-            speak_output(f"Found flights to {city}. Here are options:")
-            print(result)
-            speak_output("Which flight would you prefer? Say 1, 2, or 3.")
-            choice = get_voice_input("Select flight by number")
-            try:
-                choice_idx = int(choice.strip()) - 1
-                selected_flight = flights[choice_idx]
-            except (ValueError, IndexError):
-                speak_output("Booking the first available flight.")
-                selected_flight = flights[0]
-            return ask_for_booking("flight", selected_flight, city, is_voice)
-        else:
-            return result + "\n\nTo book, use command: 'book flight [number] to [city] for [your name]'"
-    
-    # Places
-    elif "places" in text_lower or "attractions" in text_lower or "visit" in text_lower or "see" in text_lower:
+            return handle_number_selection(flights, "flight", city, is_voice)
+        return list_options(flights, "flight", city)
+
+    # Attractions queries
+    if "places" in text_lower or "attractions" in text_lower or "things to do" in text_lower:
         if not city:
             if is_voice:
-                # Ask for city explicitly
                 speak_output("Which city would you like to explore?")
-                city_text = get_voice_input("Say the city name")
-                city = extract_city(city_text) if city_text else None
-            if not city:
-                return "Please specify a city to explore."
-        
-        places = get_top_attractions(city)
+                city = extract_city(get_voice_input("Say city name"))
+            else:
+                return "Please specify the city name for attractions."
+        places = get_top_attractions(city) if city else []
         if not places:
             return f"No attractions found in {city}."
-            
-        return f"🏛️ Top attractions in {city}:\n" + "\n".join(places)
-    
-    # Bookings
-    elif "my bookings" in text_lower or "reservations" in text_lower or "bookings" in text_lower:
+        return f"Top attractions in {city}:\n" + "\n".join(f"- {place}" for place in places)
+
+    # Booking management
+    if "booking" in text_lower or "reservation" in text_lower:
         bookings = load_bookings()
         if not bookings:
-            return "You have no bookings yet."
-
-        result = "📋 Your Bookings:\n" + "="*50 + "\n"
-        for booking in bookings:
+            return "No bookings yet."
+        
+        response = "Your bookings:\n"
+        for i, booking in enumerate(bookings, 1):
             if booking['type'] == 'hotel':
-                result += (f"ID: {booking['id']}\n"
-                          f"Hotel: {booking['hotel']} in {booking['city']}\n"
-                          f"Date: {booking['date']}\n"
-                          f"Price: {booking.get('price', 'N/A')}\n\n")
+                details = f"Hotel: {booking.get('hotel', 'N/A')} in {booking.get('city', 'N/A')}"
+            elif booking['type'] == 'flight':
+                details = f"Flight: {booking.get('airline', 'N/A')} to {booking.get('destination', 'N/A')}"
             else:
-                result += (f"ID: {booking['id']}\n"
-                          f"Flight: {booking['airline']} {booking.get('flight_number', '')}\n"
-                          f"To: {booking['destination']}\n"
-                          f"Date: {booking['date']}\n"
-                          f"Price: {booking.get('price', 'N/A')}\n\n")
-        result += "="*50
-        return result
-    
-    else:
-        return ("Sorry, I didn't understand. I can help with:\n"
-                "- Weather forecasts\n"
-                "- Hotel bookings\n"
-                "- Flight information\n"
-                "- Tourist attractions\n"
-                "- Your bookings\n\n"
-                "Try: 'hotels in London' or 'weather in Tokyo'")
+                details = "Unknown booking type"
+            response += f"{i}. {details} (ID: {booking['id']})\n"
+        return response
 
+    return "Sorry, I didn't understand. Try asking about weather, flights, hotels, or places."
+
+# Main application loop
 def main():
-    speak_output("Hello! I'm your voice travel assistant.")
+    speak_output("Hello! I'm your voice travel assistant. How can I help you today?")
+    
     while True:
-        spoken = get_voice_input("How can I help? Say 'exit' to quit.")
+        spoken = get_voice_input("You can ask about flights, hotels, weather, or attractions. Say 'exit' to quit.")
         if not spoken:
             speak_output("Please try again.")
             continue
+            
         if "exit" in spoken.lower() or "quit" in spoken.lower():
-            speak_output("Goodbye! Happy travels!")
+            speak_output("Goodbye! Have a great trip!")
             break
-
+            
         print(f"🗣️ You said: {spoken}")
         response = handle_query(spoken, is_voice=True)
         print("💬", response)
-        if response:  # Only speak if there's a response
-            speak_output(response)
+        speak_output(response)
 
 if __name__ == "__main__":
     main()
-    

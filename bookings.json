@@ -83,6 +83,122 @@
       "hotel": "Goa Plaza",
       "city": "Goa",
       "price": "$200/night"
+    },
+    {
+      "id": "A709384A",
+      "type": "flight",
+      "user": "Divya",
+      "date": "Today",
+      "airline": "SkyHigh Airlines",
+      "flight_number": "SH764",
+      "destination": "Hyderabad",
+      "departure": "08:00 AM",
+      "arrival": "11:00 AM",
+      "price": "$250"
+    },
+    {
+      "id": "BB4675A6",
+      "type": "flight",
+      "user": "Aditi",
+      "date": "Today",
+      "status": "confirmed",
+      "airline": "Global Airways",
+      "flight_number": "GA818",
+      "from": "Your Location",
+      "to": "Paris",
+      "departure": "02:00 PM",
+      "arrival": "06:30 PM",
+      "price": "$320"
+    },
+    {
+      "id": "6478AAE7",
+      "type": "hotel",
+      "user": "divya",
+      "date": "Today",
+      "hotel": "Mumbai Plaza",
+      "city": "Mumbai",
+      "price": "$200/night"
+    },
+    {
+      "id": "762125C9",
+      "type": "flight",
+      "user": "vikram",
+      "date": "Today",
+      "airline": "SkyHigh Airlines",
+      "flight_number": "SH418",
+      "destination": "Bouquet",
+      "departure": "08:00 AM",
+      "arrival": "11:00 AM",
+      "price": "$250"
+    },
+    {
+      "id": "E5F28BB6",
+      "type": "hotel",
+      "user": "Divya",
+      "date": "2025-06-30",
+      "hotel": "Cozy Tokyo Inn",
+      "city": "Tokyo",
+      "price": "$120/night",
+      "address": "789 Side Rd, Tokyo",
+      "rating": 3.9
+    },
+    {
+      "id": "C1D45E1D",
+      "type": "flight",
+      "user": "Anjali",
+      "date": "2025-06-30",
+      "airline": "Global Airways",
+      "flight_number": "GA736",
+      "destination": "Paris",
+      "departure": "02:00 PM",
+      "arrival": "06:30 PM",
+      "price": "$320"
+    },
+    {
+      "id": "4A547625",
+      "type": "hotel",
+      "user": "Divya",
+      "date": "2025-06-30",
+      "hotel": "Cozy Delhi Inn",
+      "city": "Delhi",
+      "price": "$120/night",
+      "address": "789 Side Rd, Delhi",
+      "rating": 3.9
+    },
+    {
+      "id": "061E9D71",
+      "type": "flight",
+      "user": "Divya",
+      "date": "2025-06-30",
+      "airline": "Global Airways",
+      "flight_number": "GA691",
+      "destination": "Delhi",
+      "departure": "02:00 PM",
+      "arrival": "06:30 PM",
+      "price": "$320"
+    },
+    {
+      "id": "1C388D9C",
+      "type": "hotel",
+      "user": "Divya",
+      "date": "2025-06-30",
+      "hotel": "Grand Tokyo Hotel",
+      "city": "Tokyo",
+      "price": "$150/night",
+      "address": "123 Main St, Tokyo",
+      "rating": 4.5
+    },
+    {
+      "id": "F3987510",
+      "type": "flight",
+      "user": "Divya",
+      "date": "2025-06-30",
+      "airline": "SkyHigh Airlines",
+      "flight_number": "SH641",
+      "destination": "Paris",
+      "departure": "08:00 AM",
+      "arrival": "11:00 AM",
+      "price": "$250"
     }
   ]
 }
