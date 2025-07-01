@@ -9,14 +9,16 @@ from datetime import datetime
 import pyttsx3
 import json
 import os
+import time
 
 # Initialize speech recognition and text-to-speech
 recognizer = sr.Recognizer()
 engine = pyttsx3.init()
 engine.setProperty('rate', 150)
 
-# Geoapify API Key
+# API Keys
 GEOAPIFY_KEY = "484e5851895a4b54bcdabcb4c1f5e34d"
+OPENWEATHER_API_KEY = "419c43c96821bf08a5d536944bcfcb01"
 
 # ------ Core Functionality ------
 # Number word to digit mapping
@@ -27,7 +29,10 @@ NUMBER_WORDS = {
     "1": 1, "2": 2, "3": 3, "4": 4, "5": 5, "6": 6, "7": 7, "8": 8, "9": 9, "10": 10
 }
 
-YES_NO_WORDS = ["yes", "no", "yeah", "yep", "sure", "no", "nope", "nah"]
+# Expanded yes/no recognition with intent detection
+POSITIVE_WORDS = ["yes", "yeah", "yep", "sure", "ok", "okay", "affirmative", "absolutely", "book it", "confirm"]
+NEGATIVE_WORDS = ["no", "nah", "nope", "negative", "cancel", "stop", "don't", "not"]
+YES_NO_WORDS = POSITIVE_WORDS + NEGATIVE_WORDS
 
 ORDINAL_WORDS = {
     1: "first", 2: "second", 3: "third", 4: "fourth", 5: "fifth"
@@ -67,35 +72,147 @@ def save_booking(booking):
 def get_hotel_options(city):
     if not city:
         return []
-    return [
-        {"name": f"Grand {city} Hotel", "price": "$150/night", "rating": 4.5, "address": f"123 Main St, {city}"},
-        {"name": f"{city} Plaza", "price": "$200/night", "rating": 4.2, "address": f"456 Center Ave, {city}"},
-        {"name": f"Cozy {city} Inn", "price": "$120/night", "rating": 3.9, "address": f"789 Side Rd, {city}"}
-    ]
+    
+    # Popular hotels in major cities
+    popular_hotels = {
+        "New York": [
+            {"name": "The Plaza Hotel", "price": "$450/night", "rating": 4.8, "address": "768 5th Ave, New York"},
+            {"name": "The Ritz-Carlton", "price": "$520/night", "rating": 4.9, "address": "50 Central Park S, New York"},
+            {"name": "Crosby Street Hotel", "price": "$380/night", "rating": 4.7, "address": "79 Crosby St, New York"}
+        ],
+        "Paris": [
+            {"name": "Hôtel Ritz Paris", "price": "$720/night", "rating": 4.9, "address": "15 Pl. Vendôme, Paris"},
+            {"name": "Le Meurice", "price": "$680/night", "rating": 4.8, "address": "228 Rue de Rivoli, Paris"},
+            {"name": "Hôtel Plaza Athénée", "price": "$850/night", "rating": 4.9, "address": "25 Av. Montaigne, Paris"}
+        ],
+        "Tokyo": [
+            {"name": "The Ritz-Carlton Tokyo", "price": "$620/night", "rating": 4.9, "address": "Tokyo Midtown 9-7-1 Akasaka"},
+            {"name": "Park Hyatt Tokyo", "price": "$580/night", "rating": 4.8, "address": "3-7-1-2 Nishishinjuku, Shinjuku"},
+            {"name": "Mandarin Oriental Tokyo", "price": "$750/night", "rating": 4.9, "address": "2-1-1 Nihonbashi Muromachi"}
+        ],
+        "Dubai": [
+            {"name": "Burj Al Arab Jumeirah", "price": "$1,200/night", "rating": 4.9, "address": "Jumeirah St, Dubai"},
+            {"name": "Atlantis The Palm", "price": "$850/night", "rating": 4.8, "address": "Crescent Rd, Dubai"},
+            {"name": "Armani Hotel Dubai", "price": "$780/night", "rating": 4.7, "address": "Burj Khalifa, Dubai"}
+        ]
+    }
+    
+    # Return popular hotels if available, else generic ones
+    if city in popular_hotels:
+        return popular_hotels[city]
+    else:
+        return [
+            {"name": f"Grand {city} Hotel", "price": "$150/night", "rating": 4.5, "address": f"123 Main St, {city}"},
+            {"name": f"{city} Plaza", "price": "$200/night", "rating": 4.2, "address": f"456 Center Ave, {city}"},
+            {"name": f"Cozy {city} Inn", "price": "$120/night", "rating": 3.9, "address": f"789 Side Rd, {city}"}
+        ]
 
 def get_flight_options(destination):
     if not destination:
         return []
-    return [
-        {
-            "airline": "SkyHigh Airlines",
-            "flight_number": f"SH{random.randint(100,999)}",
-            "departure": "08:00 AM",
-            "arrival": "11:00 AM",
-            "duration": "3h",
-            "price": "$250",
-            "seats": list(string.ascii_uppercase[:10])
-        },
-        {
-            "airline": "Global Airways",
-            "flight_number": f"GA{random.randint(100,999)}", 
-            "departure": "02:00 PM",
-            "arrival": "06:30 PM",
-            "duration": "4h 30m",
-            "price": "$320",
-            "seats": list(string.ascii_uppercase[:10])
-        }
-    ]
+    
+    # Popular flight routes
+    popular_routes = {
+        "New York": [
+            {"airline": "Delta Airlines", "departure": "07:30 AM", "arrival": "10:45 AM", "price": "$320"},
+            {"airline": "American Airlines", "departure": "02:15 PM", "arrival": "05:30 PM", "price": "$350"},
+            {"airline": "United Airlines", "departure": "06:00 PM", "arrival": "09:15 PM", "price": "$300"}
+        ],
+        "Paris": [
+            {"airline": "Air France", "departure": "09:45 AM", "arrival": "11:30 PM", "price": "$780"},
+            {"airline": "British Airways", "departure": "01:20 PM", "arrival": "03:00 AM", "price": "$820"},
+            {"airline": "Lufthansa", "departure": "05:30 PM", "arrival": "07:10 AM", "price": "$750"}
+        ],
+        "Tokyo": [
+            {"airline": "ANA Airlines", "departure": "10:30 AM", "arrival": "03:45 PM", "price": "$950"},
+            {"airline": "Japan Airlines", "departure": "02:00 PM", "arrival": "07:15 PM", "price": "$980"},
+            {"airline": "Singapore Airlines", "departure": "08:30 PM", "arrival": "01:45 AM", "price": "$920"}
+        ],
+        "Dubai": [
+            {"airline": "Emirates", "departure": "08:15 AM", "arrival": "07:45 PM", "price": "$880"},
+            {"airline": "Etihad Airways", "departure": "12:30 PM", "arrival": "12:00 AM", "price": "$850"},
+            {"airline": "Qatar Airways", "departure": "04:45 PM", "arrival": "04:15 AM", "price": "$820"}
+        ]
+    }
+    
+    # Return popular flights if available, else generic ones
+    if destination in popular_routes:
+        return popular_routes[destination]
+    else:
+        return [
+            {
+                "airline": "SkyHigh Airlines",
+                "departure": "08:00 AM",
+                "arrival": "11:00 AM",
+                "price": "$250"
+            },
+            {
+                "airline": "Global Airways",
+                "departure": "02:00 PM",
+                "arrival": "06:30 PM",
+                "price": "$320"
+            }
+        ]
+
+def get_weather(city):
+    """
+    Fetches current weather data for a given city using OpenWeatherMap API.
+
+    Args:
+        city (str): Name of the city to get weather for.
+
+    Returns:
+        str: A formatted weather report or error message.
+    """
+    base_url = "http://api.openweathermap.org/data/2.5/weather"
+    params = {
+        "q": city,
+        "appid": OPENWEATHER_API_KEY,
+        "units": "metric"
+    }
+
+    try:
+        response = requests.get(base_url, params=params)
+        data = response.json()
+
+        if response.status_code == 200:
+            temperature = data["main"]["temp"]
+            feels_like = data["main"]["feels_like"]
+            humidity = data["main"]["humidity"]
+            wind_speed = data["wind"]["speed"]
+            description = data["weather"][0]["description"].title()
+            icon_code = data["weather"][0]["icon"]
+            
+            # Get weather icon based on code
+            weather_icons = {
+                "01": "☀️",  # clear sky
+                "02": "⛅",  # few clouds
+                "03": "☁️",  # scattered clouds
+                "04": "☁️",  # broken clouds
+                "09": "🌧️",  # shower rain
+                "10": "🌦️",  # rain
+                "11": "⛈️",  # thunderstorm
+                "13": "❄️",  # snow
+                "50": "🌫️"   # mist
+            }
+            icon = weather_icons.get(icon_code[:2], "🌡️")
+            
+            return (
+                f"{icon} Weather in {city.title()}:\n"
+                f"• Current: {description}\n"
+                f"• Temperature: {temperature}°C (Feels like {feels_like}°C)\n"
+                f"• Humidity: {humidity}%\n"
+                f"• Wind: {wind_speed} m/s"
+            )
+        elif response.status_code == 404:
+            return f"⚠️ City '{city}' not found. Please check the spelling."
+        else:
+            return f"❌ Couldn't fetch weather for {city}. Error: {data.get('message', 'Unknown error')}"
+    
+    except requests.exceptions.RequestException as e:
+        return f" Network error: {str(e)}"
+    except Exception as e:
+        return f"⚠️ Unexpected error: {str(e)}"
 
 def get_top_attractions(city):
     """Get top tourist attractions using Geoapify API"""
@@ -142,21 +259,36 @@ def extract_city(text):
     if not text:
         return None
     
+    # Define stop words to filter out
+    STOP_WORDS = {
+        "hotel", "hotels", "flight", "flights", "weather", "attractions", 
+        "place", "places", "book", "booking", "show", "find", "stay", 
+        "accommodation", "trip", "trips", "my", "me", "i", "for", "in", 
+        "at", "near", "to", "the", "a", "an", "this", "that", "please", 
+        "today", "now", "current", "check", "see", "want"
+    }
+    
     patterns = [
         r"\b(?:in|at|for|near|to)\s+([a-zA-Z\s]{3,})\b",
         r"\b(?:hotels?|flights?|weather|places?|attractions?)\s+(?:in|at|for|near|to)?\s*([a-zA-Z\s]+)\b",
         r"\b(?:book|find|show)\s+(?:a\s+)?(?:hotel|flight)\s+(?:in|at|for|near|to)?\s*([a-zA-Z\s]+)\b",
-        r"\b([A-Z][a-zA-Z\s]{3,})\b"
+        r"\b([a-zA-Z][a-zA-Z\s]{2,})\b"
     ]
     
     for pattern in patterns:
         matches = re.finditer(pattern, text, re.IGNORECASE)
         for match in matches:
             city = match.group(1).strip()
-            city = re.sub(r'\b(?:please|today|now|book|find|show|attractions?|places?)\b', '', city, flags=re.IGNORECASE).strip()
+            # Clean common false positives
+            city = re.sub(r'\b(?:please|today|now|book|find|show|attractions?|places?)\b', 
+                          '', city, flags=re.IGNORECASE).strip()
             city = re.sub(r'\s+\b(?:in|at|for|near|to)\b$', '', city, flags=re.IGNORECASE).strip()
-            if city and len(city) > 2:  # Filter out short invalid matches
-                return city.title()
+            
+            # Skip if city is a stop word or too short
+            if not city or len(city) < 3 or city.lower() in STOP_WORDS:
+                continue
+                
+            return city.title()
     return None
 
 def ui_listen():
@@ -213,26 +345,16 @@ def handle_flow(user_input, chat_history, context):
         context.clear()
         return chat_history + [(user_input, "How can I help you with your travel plans?")], context
     
-    # Extract city from input if not already in context
-    city = extract_city(user_input) or context.get('city')
-    
     # Handle weather query
     if "weather" in user_input.lower():
-        # Get city from user input if not already set
-        query_city = extract_city(user_input) or context.get('city')
-        if not query_city:
+        city = extract_city(user_input) or context.get('city')
+        if not city:
             context['awaiting_city'] = True
             context['intent'] = 'weather'
             return chat_history + [(user_input, "Which city's weather would you like to know?")], context
         
-        # Mock weather response
-        weather_responses = [
-            f"The weather in {query_city} is sunny with a high of 75°F",
-            f"Expect cloudy skies in {query_city} with a chance of rain, 68°F",
-            f"{query_city} is currently experiencing clear skies, 82°F"
-        ]
-        response = random.choice(weather_responses)
-        context['city'] = query_city  # Remember city for context
+        response = get_weather(city)
+        context['city'] = city  # Remember city for context
         return chat_history + [(user_input, response)], context
     
     # Handle hotel booking flow
@@ -248,6 +370,7 @@ def handle_flow(user_input, chat_history, context):
         if city:
             context['city'] = city
         
+        # Always ask for city if not provided
         if not context.get('city'):
             context['awaiting_city'] = True
             context['intent'] = 'hotel'
@@ -278,6 +401,7 @@ def handle_flow(user_input, chat_history, context):
         if city:
             context['city'] = city
         
+        # Always ask for city if not provided
         if not context.get('city'):
             context['awaiting_city'] = True
             context['intent'] = 'flight'
@@ -315,13 +439,15 @@ def handle_flow(user_input, chat_history, context):
     
     # Handle booking confirmation
     elif context.get('awaiting_confirmation'):
-        if any(yes_word in user_input.lower() for yes_word in ["yes", "yeah", "yep", "sure"]):
+        if any(yes_word in user_input.lower() for yes_word in POSITIVE_WORDS):
             context['awaiting_name'] = True
             context.pop('awaiting_confirmation', None)
             return chat_history + [(user_input, "Please provide your full name:")], context
-        else:
+        elif any(neg_word in user_input.lower() for neg_word in NEGATIVE_WORDS):
             context.clear()
             return chat_history + [(user_input, "Booking cancelled. How else can I help?")], context
+        else:
+            return chat_history + [(user_input, "Please respond with 'yes' or 'no' to confirm booking")], context
     
     # Handle name collection for booking
     elif context.get('awaiting_name'):
@@ -397,7 +523,7 @@ def handle_flow(user_input, chat_history, context):
         attractions_list = "\n- " + "\n- ".join(attractions)
         return chat_history + [(user_input, f"Top attractions in {city}:{attractions_list}")], context
     
-    # Handle bookings query - UPDATED TO INCLUDE BOOKING ID AND NAME
+    # Handle bookings query
     elif any(k in user_input.lower() for k in ["bookings", "reservations", "my trips"]):
         bookings = load_bookings()
         if not bookings:
@@ -458,52 +584,402 @@ def speak_response(chat_history):
         engine.say(last_response)
         engine.runAndWait()
 
-with gr.Blocks(title="✈️ AI Travel Assistant", theme=gr.themes.Soft()) as app:
-    gr.Markdown("""
-    <div style="text-align: center;">
-        <h1>✈️ AI Travel Assistant</h1>
-        <p><b>Book hotels, flights, and explore attractions</b></p>
-        <p><i>Speak or type your request below</i></p>
-    </div>
-    """)
+def get_current_time():
+    return datetime.now().strftime("%H:%M")
+
+def get_current_date():
+    return datetime.now().strftime("%d-%m-%Y")
+
+# Custom CSS for Copilot2Trip-like design
+copilot_css = """
+:root {
+    --primary: #2563eb;
+    --primary-dark: #1d4ed8;
+    --secondary: #f97316;
+    --dark: #1e293b;
+    --light: #f8fafc;
+    --gray: #94a3b8;
+    --card-bg: rgba(255, 255, 255, 0.92);
+    --glass: rgba(255, 255, 255, 0.1);
+}
+
+body {
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+    font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+    min-height: 100vh;
+    padding: 20px;
+    color: white;
+}
+
+.gradio-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    background: transparent !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+}
+
+#hero {
+    text-align: center;
+    padding: 30px 20px 20px;
+    margin-bottom: 20px;
+}
+
+#hero h1 {
+    font-size: 2.2rem;
+    font-weight: 700;
+    margin-bottom: 10px;
+    background: linear-gradient(to right, #38bdf8, #60a5fa);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}
+
+#hero p {
+    font-size: 1.1rem;
+    max-width: 700px;
+    margin: 0 auto 20px;
+    color: #cbd5e1;
+    opacity: 0.9;
+    line-height: 1.6;
+}
+
+#features {
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+    margin: 20px 0;
+    flex-wrap: wrap;
+}
+
+.feature-button {
+    background: var(--glass) !important;
+    border-radius: 16px !important;
+    padding: 20px 15px !important;
+    width: 160px !important;
+    text-align: center !important;
+    transition: all 0.3s ease !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    backdrop-filter: blur(10px) !important;
+    cursor: pointer !important;
+    color: white !important;
+    font-size: 1.1rem !important;
+    font-weight: 600 !important;
+    line-height: 1.4 !important;
+    white-space: pre-line !important;
+    height: auto !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: center !important;
+    align-items: center !important;
+}
+
+.feature-button:hover {
+    transform: translateY(-5px) !important;
+    background: rgba(30, 41, 59, 0.5) !important;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2) !important;
+}
+
+.gradio-chatbot {
+    min-height: 400px;
+    border-radius: 20px !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    background: rgba(15, 23, 42, 0.7) !important;
+    backdrop-filter: blur(10px);
+    padding: 15px !important;
+    margin-top: 20px;
+}
+
+.gradio-chatbot .message {
+    padding: 14px 18px !important;
+    border-radius: 18px !important;
+    margin: 10px 0 !important;
+    line-height: 1.5 !important;
+    font-size: 1.05rem;
+}
+
+.gradio-button {
+    background: var(--primary) !important;
+    color: white !important;
+    border-radius: 14px !important;
+    padding: 12px 24px !important;
+    font-weight: 600 !important;
+    border: none !important;
+    transition: all 0.3s ease !important;
+    font-size: 0.95rem !important;
+    box-shadow: 0 4px 14px rgba(37, 99, 235, 0.25) !important;
+}
+
+.gradio-button:hover {
+    background: var(--primary-dark) !important;
+    transform: translateY(-3px);
+    box-shadow: 0 6px 20px rgba(37, 99, 235, 0.35) !important;
+}
+
+.secondary-button {
+    background: rgba(255, 255, 255, 0.1) !important;
+    color: white !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+}
+
+.dark-button {
+    background: rgba(30, 41, 59, 0.8) !important;
+}
+
+.examples-container {
+    background: rgba(15, 23, 42, 0.5);
+    border-radius: 16px;
+    padding: 20px;
+    margin: 25px 0;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.examples-header {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 15px;
+    color: #60a5fa;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.examples-row {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.example-pill {
+    background: rgba(30, 41, 59, 0.7) !important;
+    border-radius: 50px !important;
+    padding: 8px 18px !important;
+    cursor: pointer !important;
+    transition: all 0.3s ease !important;
+    font-size: 0.95rem !important;
+    border: 1px solid rgba(96, 165, 250, 0.3) !important;
+    color: #e2e8f0 !important;
+    font-weight: 500 !important;
+    min-width: unset !important;
+    height: auto !important;
+}
+
+.example-pill:hover {
+    background: #3b82f6 !important;
+    color: white !important;
+    border-color: #3b82f6 !important;
+    transform: translateY(-2px) !important;
+}
+
+.gradio-input {
+    border-radius: 16px !important;
+    padding: 16px 22px !important;
+    font-size: 1.05rem !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    background: rgba(15, 23, 42, 0.7) !important;
+    color: white !important;
+    transition: all 0.3s ease !important;
+}
+
+.gradio-input:focus {
+    border-color: #60a5fa !important;
+    box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.2) !important;
+    outline: none;
+}
+
+.gradio-input::placeholder {
+    color: #94a3b8 !important;
+}
+
+.input-container {
+    background: rgba(15, 23, 42, 0.5);
+    border-radius: 16px;
+    padding: 18px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    margin-bottom: 20px;
+}
+
+.actions-container {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 15px;
+}
+
+.chat-message.user {
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%) !important;
+    color: white !important;
+    border-radius: 22px 22px 5px 22px !important;
+    margin-left: 20% !important;
+    border: none !important;
+}
+
+.chat-message.bot {
+    background: rgba(30, 41, 59, 0.7) !important;
+    border: 1px solid rgba(96, 165, 250, 0.2) !important;
+    border-radius: 22px 22px 22px 5px !important;
+    margin-right: 20% !important;
+    color: #e2e8f0 !important;
+}
+
+#footer {
+    text-align: center;
+    margin-top: 30px;
+    color: #64748b;
+    font-size: 0.9rem;
+    padding: 15px;
+}
+
+.avatar {
+    border-radius: 12px !important;
+}
+
+.status-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 20px;
+    background: rgba(15, 23, 42, 0.5);
+    border-radius: 16px;
+    margin-bottom: 15px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.status-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.95rem;
+}
+
+.weather-indicator {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #60a5fa;
+    font-weight: 500;
+}
+
+.language-selector {
+    background: rgba(30, 41, 59, 0.7);
+    border-radius: 50px;
+    padding: 6px 15px;
+    font-size: 0.9rem;
+    border: 1px solid rgba(96, 165, 250, 0.3);
+    color: #e2e8f0;
+}
+
+@media (max-width: 768px) {
+    .feature-button {
+        width: calc(50% - 15px) !important;
+        font-size: 1rem !important;
+    }
+    
+    .gradio-chatbot {
+        min-height: 350px;
+    }
+    
+    .status-bar {
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+}
+"""
+
+# Initialize time and date
+current_time = get_current_time()
+current_date = get_current_date()
+
+with gr.Blocks(title="✈️ Travel Assistant", theme=gr.themes.Soft(), css=copilot_css) as app:
+    # Hero Section
+    with gr.Column(elem_id="hero"):
+        gr.Markdown("""
+        <h1>Your intelligent travel companion</h1>
+        <p>for seamless trip planning</p>
+        """)
+    
+    # Status Bar
+    with gr.Row(elem_classes="status-bar"):
+        with gr.Column(elem_classes="status-item"):
+            gr.Markdown(f"""
+            <div class="weather-indicator">
+                <span>☔ Rain coming 9:18 PM</span>
+            </div>
+            """)
+        
+        with gr.Column(elem_classes="status-item"):
+            gr.Markdown(f"""
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <span>🔍 Search</span>
+                <span class="language-selector">ENG IN</span>
+            </div>
+            """)
+        
+        with gr.Column(elem_classes="status-item"):
+            gr.Markdown(f"""
+            <div>
+                <div style="font-size: 1.1rem; font-weight: 500;">{current_time}</div>
+                <div style="font-size: 0.9rem;">{current_date}</div>
+            </div>
+            """)
+    
+    # Feature Cards as Buttons
+    with gr.Row(elem_id="features"):
+        hotels_btn = gr.Button("🏨 Hotels\nFind perfect stays", elem_classes="feature-button")
+        flights_btn = gr.Button("✈️ Flights\nBook your journey", elem_classes="feature-button")
+        weather_btn = gr.Button("🌤️ Weather\nCheck conditions", elem_classes="feature-button")
+        attractions_btn = gr.Button("🏛️ Attractions\nDiscover experiences", elem_classes="feature-button")
     
     context_state = gr.State({})
     
-    with gr.Row():
-        chatbot = gr.Chatbot(
-            height=500,
-            bubble_full_width=False,
-            show_copy_button=True,
-            avatar_images=(
-                "https://cdn-icons-png.flaticon.com/512/1995/1995485.png", 
-                "https://cdn-icons-png.flaticon.com/512/4712/4712035.png"
-            )
-        )
-    
-    with gr.Row():
-        with gr.Column(scale=1):
-            voice_btn = gr.Button("🎤 Speak", variant="primary")
-        with gr.Column(scale=4):
-            text_input = gr.Textbox(placeholder="e.g., 'Book a hotel in Paris' or 'What's the weather in Tokyo?'", show_label=False)
-        with gr.Column(scale=1):
-            speak_btn = gr.Button("🔊 Speak Response")
-    
-    with gr.Row():
-        clear_btn = gr.Button("🧹 Clear Chat", variant="secondary")
-        restart_btn = gr.Button("🔄 Restart Conversation", variant="secondary")
-    
-    gr.Examples(
-        examples=[
-            ["Book a hotel in Tokyo"],
-            ["Show flights to Paris"],
-            ["What's the weather in London?"],
-            ["Top attractions in New York"],
-            ["View my bookings"]
-        ],
-        inputs=text_input,
-        label="Try these examples:"
+    # Chat Interface
+    chatbot = gr.Chatbot(
+        height=400,
+        show_copy_button=True,
+        avatar_images=(
+            "https://cdn-icons-png.flaticon.com/512/1144/1144760.png",  # User
+            "https://cdn-icons-png.flaticon.com/512/4712/4712035.png"   # Assistant
+        ),
+        elem_classes="gradio-chatbot"
     )
     
+    # Input Area
+    with gr.Column(elem_classes="input-container"):
+        with gr.Row():
+            text_input = gr.Textbox(
+                placeholder="Ask about hotels, flights, weather, or attractions...",
+                show_label=False,
+                container=False,
+                elem_classes="gradio-input",
+                scale=5
+            )
+            voice_btn = gr.Button("🎤 Speak", variant="primary", elem_classes="gradio-button", scale=1)
+            submit_btn = gr.Button("Send", variant="primary", elem_classes="gradio-button", scale=1)
+        
+        with gr.Row(elem_classes="actions-container"):
+            speak_btn = gr.Button("🔊 Speak Response", variant="secondary", elem_classes="gradio-button secondary-button")
+            clear_btn = gr.Button("🧹 Clear Chat", variant="secondary", elem_classes="gradio-button secondary-button")
+            restart_btn = gr.Button("🔄 Restart", variant="secondary", elem_classes="gradio-button secondary-button")
+            bookings_btn = gr.Button("📋 My Bookings", variant="secondary", elem_classes="gradio-button dark-button")
+    
+    # Examples Section
+    with gr.Column(elem_classes="examples-container"):
+        gr.Markdown("**Try these examples:**", elem_classes="examples-header")
+        with gr.Row(elem_classes="examples-row"):
+            example1 = gr.Button("Book a hotel in Tokyo", elem_classes="example-pill")
+            example2 = gr.Button("Show flights to Paris", elem_classes="example-pill")
+            example3 = gr.Button("What's the weather in London?", elem_classes="example-pill")
+            example4 = gr.Button("Top attractions in New York", elem_classes="example-pill")
+            example5 = gr.Button("Find a luxury hotel in Dubai", elem_classes="example-pill")
+    
+    # Footer
+    gr.Markdown("""
+    <div id="footer">
+        <p>✈️ Travel Assistant v2.0 • Your AI travel companion</p>
+    </div>
+    """)
+    
+    # Event Handling
     voice_btn.click(
         handle_voice,
         inputs=[chatbot, context_state],
@@ -511,6 +987,12 @@ with gr.Blocks(title="✈️ AI Travel Assistant", theme=gr.themes.Soft()) as ap
     )
     
     text_input.submit(
+        handle_text,
+        inputs=[text_input, chatbot, context_state],
+        outputs=[chatbot, text_input, context_state]
+    )
+    
+    submit_btn.click(
         handle_text,
         inputs=[text_input, chatbot, context_state],
         outputs=[chatbot, text_input, context_state]
@@ -532,6 +1014,108 @@ with gr.Blocks(title="✈️ AI Travel Assistant", theme=gr.themes.Soft()) as ap
         fn=lambda: ([], {}, ""),
         inputs=[],
         outputs=[chatbot, context_state, text_input]
+    )
+    
+    bookings_btn.click(
+        fn=lambda: ("show my bookings", [], {}),
+        inputs=[],
+        outputs=[text_input, chatbot, context_state]
+    ).then(
+        handle_text,
+        inputs=[text_input, chatbot, context_state],
+        outputs=[chatbot, text_input, context_state]
+    )
+    
+    # Feature card click handlers
+    hotels_btn.click(
+        fn=lambda: ("book hotel", [], {}),
+        inputs=[],
+        outputs=[text_input, chatbot, context_state]
+    ).then(
+        handle_text,
+        inputs=[text_input, chatbot, context_state],
+        outputs=[chatbot, text_input, context_state]
+    )
+    
+    flights_btn.click(
+        fn=lambda: ("book flight", [], {}),
+        inputs=[],
+        outputs=[text_input, chatbot, context_state]
+    ).then(
+        handle_text,
+        inputs=[text_input, chatbot, context_state],
+        outputs=[chatbot, text_input, context_state]
+    )
+    
+    weather_btn.click(
+        fn=lambda: ("weather", [], {}),
+        inputs=[],
+        outputs=[text_input, chatbot, context_state]
+    ).then(
+        handle_text,
+        inputs=[text_input, chatbot, context_state],
+        outputs=[chatbot, text_input, context_state]
+    )
+    
+    attractions_btn.click(
+        fn=lambda: ("show attractions", [], {}),
+        inputs=[],
+        outputs=[text_input, chatbot, context_state]
+    ).then(
+        handle_text,
+        inputs=[text_input, chatbot, context_state],
+        outputs=[chatbot, text_input, context_state]
+    )
+    
+    # Example pill click handlers
+    example1.click(
+        fn=lambda: ("Book a hotel in Tokyo", [], {}),
+        inputs=[],
+        outputs=[text_input, chatbot, context_state]
+    ).then(
+        handle_text,
+        inputs=[text_input, chatbot, context_state],
+        outputs=[chatbot, text_input, context_state]
+    )
+    
+    example2.click(
+        fn=lambda: ("Show flights to Paris", [], {}),
+        inputs=[],
+        outputs=[text_input, chatbot, context_state]
+    ).then(
+        handle_text,
+        inputs=[text_input, chatbot, context_state],
+        outputs=[chatbot, text_input, context_state]
+    )
+    
+    example3.click(
+        fn=lambda: ("What's the weather in London?", [], {}),
+        inputs=[],
+        outputs=[text_input, chatbot, context_state]
+    ).then(
+        handle_text,
+        inputs=[text_input, chatbot, context_state],
+        outputs=[chatbot, text_input, context_state]
+    )
+    
+    example4.click(
+        fn=lambda: ("Top attractions in New York", [], {}),
+        inputs=[],
+        outputs=[text_input, chatbot, context_state]
+    ).then(
+        handle_text,
+        inputs=[text_input, chatbot, context_state],
+        outputs=[chatbot, text_input, context_state]
+    )
+    
+    example5.click(
+        fn=lambda: ("Find a luxury hotel in Dubai", [], {}),
+        inputs=[],
+        outputs=[text_input, chatbot, context_state]
+    ).then(
+        handle_text,
+        inputs=[text_input, chatbot, context_state],
+        outputs=[chatbot, text_input, context_state]
     )
 
 if __name__ == "__main__":

@@ -59,7 +59,10 @@ NUMBER_WORDS = {
     "1": 1, "2": 2, "3": 3, "4": 4, "5": 5, "6": 6, "7": 7, "8": 8, "9": 9, "10": 10
 }
 
-YES_NO_WORDS = ["yes", "no", "yeah", "nah", "yep", "nope"]
+# Expanded yes/no recognition with intent detection
+POSITIVE_WORDS = ["yes", "yeah", "yep", "sure", "ok", "okay", "affirmative", "absolutely", "book it", "confirm"]
+NEGATIVE_WORDS = ["no", "nah", "nope", "negative", "cancel", "stop", "don't", "not"]
+YES_NO_WORDS = POSITIVE_WORDS + NEGATIVE_WORDS
 
 ORDINAL_WORDS = {
     1: "first", 2: "second", 3: "third", 4: "fourth", 5: "fifth"
@@ -103,10 +106,11 @@ def extract_city(text):
     if not text:
         return None
     
+    # Enhanced patterns with better city recognition
     patterns = [
         r"\b(?:in|at|for|near|to)\s+([a-zA-Z\s]{3,})\b",
-        r"\b(?:hotels?|flights?|weather|places?|attractions?)\s+(?:in|at|for|near|to)?\s*([a-zA-Z\s]+)\b",
-        r"\b(?:book|find|show)\s+(?:a\s+)?(?:hotel|flight)\s+(?:in|at|for|near|to)?\s*([a-zA-Z\s]+)\b",
+        r"\b(?:hotels?|flights?|weather|places?|attractions?)\s+(?:in|at|for|near|to)?\s*([a-zA-Z\s]{3,})\b",
+        r"\b(?:book|find|show)\s+(?:a\s+)?(?:hotel|flight)\s+(?:in|at|for|near|to)?\s*([a-zA-Z\s]{3,})\b",
         r"\b([A-Z][a-zA-Z\s]{3,})\b"
     ]
     
@@ -114,32 +118,40 @@ def extract_city(text):
         matches = re.finditer(pattern, text, re.IGNORECASE)
         for match in matches:
             city = match.group(1).strip()
-            city = re.sub(r'\b(?:please|today|now|book|find|show|attractions?|places?)\b', '', city, flags=re.IGNORECASE).strip()
+            # Improved stop words removal
+            city = re.sub(r'\b(?:please|today|now|book|find|show|attractions?|places?|hotels?|flights?|weather)\b', 
+                         '', city, flags=re.IGNORECASE).strip()
             city = re.sub(r'\s+\b(?:in|at|for|near|to)\b$', '', city, flags=re.IGNORECASE).strip()
             if city and len(city) > 2:  # Filter out short invalid matches
                 return city.title()
     return None
 
-def get_voice_input(prompt="Speak now...", max_attempts=3, expected=None):
+def get_voice_input(prompt="Speak now...", max_attempts=3, expected=None, timeout=10, phrase_limit=8):
     recognizer = sr.Recognizer()
     for attempt in range(max_attempts):
         with sr.Microphone() as source:
             print(f"🎤 {prompt} (Attempt {attempt + 1} of {max_attempts})")
             recognizer.adjust_for_ambient_noise(source, duration=1)
             try:
-                audio = recognizer.listen(source, timeout=10, phrase_time_limit=5)
+                audio = recognizer.listen(source, timeout=timeout, phrase_time_limit=phrase_limit)
                 text = recognizer.recognize_google(audio).lower()
                 print(f"🗣️ You said: {text}")
                 
                 if expected:
-                    for word in expected:
-                        if word.lower() in text.split() or word.lower() == text:
-                            return word.lower()
+                    # Check for exact matches
+                    if text in expected:
+                        return text
+                    
                     # Check for partial matches
                     for word in expected:
-                        if any(part.lower() == word.lower() for part in text.split()):
-                            return word.lower()
-                    continue
+                        if word in text:
+                            return word
+                    
+                    # Check for positive/negative intent
+                    if any(pos in text for pos in POSITIVE_WORDS):
+                        return "yes"
+                    if any(neg in text for neg in NEGATIVE_WORDS):
+                        return "no"
                 return text
             except sr.UnknownValueError:
                 print("Could not understand audio.")
@@ -161,48 +173,73 @@ def convert_to_number(word):
 def ask_for_booking(item_type, item_data, city, is_voice=False):
     if is_voice:
         speak_output(f"Do you want to book this {item_type}? Please say yes or no.")
-        response = get_voice_input("Confirm booking?", expected=YES_NO_WORDS)
+        response = get_voice_input("Confirm booking?", expected=YES_NO_WORDS, phrase_limit=5)
     else:
-        response = "no"
+        response = input("✍️ Book this? (yes/no): ").lower()
 
-    if response in YES_NO_WORDS:
-        if response == "yes":
-            if not city:
-                speak_output("Please say the city name for the booking.")
-                city = get_voice_input("Say the city name")
-                city = extract_city(city) or city
-            
-            name = get_voice_input("Please say your full name for the booking.") if is_voice else input("Enter your full name: ")
-            if not name:
-                return "Booking cancelled. No name provided."
-            
-            booking = {
-                "id": str(uuid4())[:8].upper(),
-                "type": item_type,
-                "user": name,
-                "date": "Today"
-            }
-            
-            if item_type == "hotel":
-                booking.update({
-                    "hotel": item_data['name'], 
-                    "city": city, 
-                    "price": item_data.get('price', 'N/A')
-                })
-            elif item_type == "flight":
-                booking.update({
-                    "airline": item_data['airline'], 
-                    "destination": city, 
-                    "departure": item_data.get('departure', 'N/A'),
-                    "price": item_data.get('price', 'N/A')
-                })
-            
-            result = save_booking(booking)
-            if is_voice:
-                speak_output(result)
-            return result
+    # Enhanced yes/no detection with intent analysis
+    if any(pos in response for pos in POSITIVE_WORDS):
+        return proceed_with_booking(item_type, item_data, city, is_voice)
+    elif any(neg in response for neg in NEGATIVE_WORDS):
         return "Booking cancelled."
-    return "Invalid response. Booking cancelled."
+    
+    # Fallback: Ask to confirm with a gesture
+    if is_voice:
+        speak_output("I'm having trouble understanding. Please nod for yes or shake your head for no.")
+        response = get_voice_input("Confirm booking? (say yes/no or nod/shake head)", expected=YES_NO_WORDS, max_attempts=2)
+        if any(pos in response for pos in POSITIVE_WORDS):
+            return proceed_with_booking(item_type, item_data, city, is_voice)
+    
+    return "Booking cancelled."
+
+def proceed_with_booking(item_type, item_data, city, is_voice):
+    # Handle missing city name
+    if not city:
+        if is_voice:
+            speak_output("Which city is this for? Please say the city name.")
+            city_response = get_voice_input("Say the city name", phrase_limit=6)
+            city = extract_city(city_response) or city_response.title()
+        else:
+            city = input("✍️ Enter city name: ").title()
+    
+    if not city:
+        return "Booking cancelled. City not provided."
+    
+    # Get user name
+    if is_voice:
+        speak_output("Please say your full name for the booking.")
+        name = get_voice_input("Your full name", phrase_limit=7)
+    else:
+        name = input("✍️ Enter your full name: ")
+    
+    if not name:
+        return "Booking cancelled. No name provided."
+    
+    booking = {
+        "id": str(uuid4())[:8].upper(),
+        "type": item_type,
+        "user": name,
+        "date": "Today"
+    }
+    
+    if item_type == "hotel":
+        booking.update({
+            "hotel": item_data['name'], 
+            "city": city, 
+            "price": item_data.get('price', 'N/A')
+        })
+    elif item_type == "flight":
+        booking.update({
+            "airline": item_data['airline'], 
+            "destination": city, 
+            "departure": item_data.get('departure', 'N/A'),
+            "price": item_data.get('price', 'N/A')
+        })
+    
+    result = save_booking(booking)
+    if is_voice:
+        speak_output(result)
+    return result
 
 def handle_number_selection(options, item_type, city, is_voice):
     options_text = list_options(options, item_type, city)
@@ -212,7 +249,7 @@ def handle_number_selection(options, item_type, city, is_voice):
     prompt = f"Please say {ORDINAL_WORDS.get(1, 'first')} through {ORDINAL_WORDS.get(len(options), str(len(options)))} or 'cancel'"
     speak_output(prompt)
     
-    choice = get_voice_input("Select option", expected=valid_choices)
+    choice = get_voice_input("Select option", expected=valid_choices, phrase_limit=5)
     
     if choice == "cancel":
         return "Selection cancelled."
@@ -236,50 +273,63 @@ def handle_query(text, is_voice=False):
 
     # Weather queries
     if "weather" in text_lower:
-        if not city and is_voice:
-            speak_output("Which city's weather would you like to know?")
-            city = extract_city(get_voice_input("Say city name"))
+        if not city:
+            if is_voice:
+                speak_output("Which city's weather would you like to know?")
+                city_response = get_voice_input("Say city name", phrase_limit=6)
+                city = extract_city(city_response) or city_response.title()
+            else:
+                return "City not specified."
         return get_weather(city) if city else "City not recognized."
 
     # Hotel queries
-    if any(k in text_lower for k in ["hotel", "stay", "accommodation"]):
-        if not city and is_voice:
-            speak_output("Which city would you like hotels in?")
-            city = extract_city(get_voice_input("Say city name"))
+    if any(k in text_lower for k in ["hotel", "stay", "accommodation", "lodging"]):
+        if not city:
+            if is_voice:
+                speak_output("Which city would you like hotels in?")
+                city_response = get_voice_input("Say city name", phrase_limit=6)
+                city = extract_city(city_response) or city_response.title()
+            else:
+                return "City not specified."
         hotels = get_hotel_options(city)
         if not hotels:
-            return f"No hotels in {city}."
+            return f"No hotels found in {city}."
         if is_voice:
             return handle_number_selection(hotels, "hotel", city, is_voice)
         return list_options(hotels, "hotel", city)
 
     # Flight queries
-    if any(k in text_lower for k in ["flight", "airline", "fly"]):
-        if not city and is_voice:
-            speak_output("Which city would you like to fly to?")
-            city = extract_city(get_voice_input("Say city name"))
+    if any(k in text_lower for k in ["flight", "airline", "fly", "ticket"]):
+        if not city:
+            if is_voice:
+                speak_output("Which city would you like to fly to?")
+                city_response = get_voice_input("Say city name", phrase_limit=6)
+                city = extract_city(city_response) or city_response.title()
+            else:
+                return "Destination not specified."
         flights = get_flight_options(city)
         if not flights:
-            return f"No flights to {city}."
+            return f"No flights found to {city}."
         if is_voice:
             return handle_number_selection(flights, "flight", city, is_voice)
         return list_options(flights, "flight", city)
 
     # Attractions queries
-    if "places" in text_lower or "attractions" in text_lower or "things to do" in text_lower:
+    if any(k in text_lower for k in ["places", "attractions", "things to do", "sightseeing"]):
         if not city:
             if is_voice:
                 speak_output("Which city would you like to explore?")
-                city = extract_city(get_voice_input("Say city name"))
+                city_response = get_voice_input("Say city name", phrase_limit=6)
+                city = extract_city(city_response) or city_response.title()
             else:
-                return "Please specify the city name for attractions."
+                return "City not specified."
         places = get_top_attractions(city) if city else []
         if not places:
             return f"No attractions found in {city}."
         return f"Top attractions in {city}:\n" + "\n".join(f"- {place}" for place in places)
 
     # Booking management
-    if "booking" in text_lower or "reservation" in text_lower:
+    if any(k in text_lower for k in ["booking", "reservation", "my bookings"]):
         bookings = load_bookings()
         if not bookings:
             return "No bookings yet."
@@ -307,7 +357,8 @@ def main():
             speak_output("Please try again.")
             continue
             
-        if "exit" in spoken.lower() or "quit" in spoken.lower():
+        spoken_lower = spoken.lower()
+        if "exit" in spoken_lower or "quit" in spoken_lower or "goodbye" in spoken_lower:
             speak_output("Goodbye! Have a great trip!")
             break
             

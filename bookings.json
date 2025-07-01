@@ -199,6 +199,50 @@
       "departure": "08:00 AM",
       "arrival": "11:00 AM",
       "price": "$250"
+    },
+    {
+      "id": "11CB12A6",
+      "type": "flight",
+      "user": "divya",
+      "date": "Today",
+      "airline": "SkyHigh Airlines",
+      "destination": "Booking",
+      "departure": "08:00 AM",
+      "price": "$250"
+    },
+    {
+      "id": "61A30A5E",
+      "type": "hotel",
+      "user": "xyz",
+      "date": "2025-07-01",
+      "hotel": "Hotel Plaza",
+      "city": "Hotel",
+      "price": "$200/night",
+      "address": "456 Center Ave, Hotel",
+      "rating": 4.2
+    },
+    {
+      "id": "B93889CE",
+      "type": "hotel",
+      "user": "Rathna",
+      "date": "2025-07-01",
+      "hotel": "The Ritz-Carlton Tokyo",
+      "city": "Tokyo",
+      "price": "$620/night",
+      "address": "Tokyo Midtown 9-7-1 Akasaka",
+      "rating": 4.9
+    },
+    {
+      "id": "3474A309",
+      "type": "flight",
+      "user": "Viks",
+      "date": "2025-07-01",
+      "airline": "British Airways",
+      "flight_number": "N/A",
+      "destination": "Paris",
+      "departure": "01:20 PM",
+      "arrival": "03:00 AM",
+      "price": "$820"
     }
   ]
 }
