@@ -243,6 +243,39 @@
       "departure": "01:20 PM",
       "arrival": "03:00 AM",
       "price": "$820"
+    },
+    {
+      "id": "F2A751F2",
+      "type": "hotel",
+      "user": "teju",
+      "date": "2025-07-02",
+      "hotel": "Delhi Plaza",
+      "city": "Delhi",
+      "price": "$200/night",
+      "address": "456 Center Ave, Delhi",
+      "rating": 4.2
+    },
+    {
+      "id": "36883071",
+      "type": "hotel",
+      "user": "vikkuu",
+      "date": "2025-07-02",
+      "hotel": "Mandarin Oriental Tokyo",
+      "city": "Tokyo",
+      "price": "$750/night",
+      "address": "2-1-1 Nihonbashi Muromachi",
+      "rating": 4.9
+    },
+    {
+      "id": "2AA75660",
+      "type": "hotel",
+      "user": "vikram",
+      "date": "2025-07-04",
+      "hotel": "The Ritz-Carlton Tokyo",
+      "city": "Tokyo",
+      "price": "$620/night",
+      "address": "Tokyo Midtown 9-7-1 Akasaka",
+      "rating": 4.9
     }
   ]
 }

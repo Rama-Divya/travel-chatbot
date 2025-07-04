@@ -1,3 +1,4 @@
+import threading
 import gradio as gr
 import speech_recognition as sr
 import re
@@ -10,15 +11,41 @@ import pyttsx3
 import json
 import os
 import time
+import queue
 
-# Initialize speech recognition and text-to-speech
+# Initialize speech recognition
 recognizer = sr.Recognizer()
-engine = pyttsx3.init()
-engine.setProperty('rate', 150)
+microphone = sr.Microphone()
 
 # API Keys
 GEOAPIFY_KEY = "484e5851895a4b54bcdabcb4c1f5e34d"
 OPENWEATHER_API_KEY = "419c43c96821bf08a5d536944bcfcb01"
+
+# TTS Engine setup
+tts_queue = queue.Queue()
+tts_active = False
+
+def tts_worker():
+    global tts_active
+    while True:
+        text = tts_queue.get()
+        if text is None:
+            break
+        try:
+            engine = pyttsx3.init()
+            voices = engine.getProperty('voices')
+            engine.setProperty('voice', voices[1].id)
+            engine.setProperty('rate', 150)
+            engine.say(text)
+            engine.runAndWait()
+        except Exception as e:
+            print(f"TTS Error: {e}")
+        tts_queue.task_done()
+    tts_active = False
+
+# Start TTS thread
+tts_thread = threading.Thread(target=tts_worker, daemon=True)
+tts_thread.start()
 
 # ------ Core Functionality ------
 # Number word to digit mapping
@@ -291,21 +318,34 @@ def extract_city(text):
             return city.title()
     return None
 
-def ui_listen():
-    with sr.Microphone() as source:
-        try:
-            print("Listening...")
-            recognizer.adjust_for_ambient_noise(source, duration=0.5)
-            audio = recognizer.listen(source, timeout=5, phrase_time_limit=8)
-            text = recognizer.recognize_google(audio).lower()
-            print(f"Heard: {text}")
-            return text
-        except sr.UnknownValueError:
-            print("Could not understand audio.")
-            return None
-        except Exception as e:
-            print(f"Listening error: {e}")
-            return None
+def ui_listen(max_attempts=3):
+    """Listen to user voice input with multiple attempts"""
+    for attempt in range(max_attempts):
+        with microphone as source:
+            try:
+                print(f"Adjusting for ambient noise... (attempt {attempt+1})")
+                recognizer.adjust_for_ambient_noise(source, duration=1)
+                print(f"Listening (attempt {attempt+1}/{max_attempts})...")
+                audio = recognizer.listen(source, timeout=8, phrase_time_limit=10)
+                print("Recognizing...")
+                text = recognizer.recognize_google(audio).lower()
+                print(f"Heard: {text}")
+                return text
+            except sr.UnknownValueError:
+                print("Could not understand audio.")
+                if attempt < max_attempts - 1:
+                    speak_response("Sorry, I didn't catch that. Please try again.")
+            except sr.RequestError as e:
+                print(f"Could not request results; {e}")
+                if attempt < max_attempts - 1:
+                    speak_response("I'm having trouble with the speech service. Please try again.")
+            except Exception as e:
+                print(f"Listening error: {e}")
+                if attempt < max_attempts - 1:
+                    speak_response("There was a problem with the microphone. Please try again.")
+    
+    speak_response("Switching to text input. Please type your request.")
+    return None
 
 def convert_to_number(word):
     return NUMBER_WORDS.get(str(word).lower().strip(), None)
@@ -338,12 +378,20 @@ def list_options(options_list, item_type, city):
             options_text += f"{ORDINAL_WORDS.get(i, str(i))}. {option['airline']} - Departs at {option['departure']} for {option['price']}\n"
     return options_text
 
+def speak_response(text):
+    """Speak text using TTS with queue system"""
+    if text.strip():
+        print(f"Adding to TTS queue: {text}")
+        tts_queue.put(text)
+
 # ------ Gradio Application ------
 def handle_flow(user_input, chat_history, context):
     # Clear context when starting over
     if user_input.lower() in ['restart', 'clear', 'new', 'reset']:
         context.clear()
-        return chat_history + [(user_input, "How can I help you with your travel plans?")], context
+        response = "How can I help you with your travel plans?"
+        speak_response(response)
+        return chat_history + [(user_input, response)], context
     
     # Handle weather query
     if "weather" in user_input.lower():
@@ -351,10 +399,13 @@ def handle_flow(user_input, chat_history, context):
         if not city:
             context['awaiting_city'] = True
             context['intent'] = 'weather'
-            return chat_history + [(user_input, "Which city's weather would you like to know?")], context
+            response = "Which city's weather would you like to know?"
+            speak_response(response)
+            return chat_history + [(user_input, response)], context
         
         response = get_weather(city)
         context['city'] = city  # Remember city for context
+        speak_response(response)
         return chat_history + [(user_input, response)], context
     
     # Handle hotel booking flow
@@ -374,11 +425,15 @@ def handle_flow(user_input, chat_history, context):
         if not context.get('city'):
             context['awaiting_city'] = True
             context['intent'] = 'hotel'
-            return chat_history + [(user_input, "Which city would you like to book a hotel in?")], context
+            response = "Which city would you like to book a hotel in?"
+            speak_response(response)
+            return chat_history + [(user_input, response)], context
         
         hotels = get_hotel_options(context['city'])
         if not hotels:
-            return chat_history + [(user_input, f"Sorry, no hotels found in {context['city']}")], context
+            response = f"Sorry, no hotels found in {context['city']}"
+            speak_response(response)
+            return chat_history + [(user_input, response)], context
         
         context.update({
             'hotels': hotels,
@@ -386,7 +441,9 @@ def handle_flow(user_input, chat_history, context):
             'booking_type': 'hotel'
         })
         options = list_options(hotels, "hotel", context['city'])
-        return chat_history + [(user_input, f"{options}\n\nWhich would you like? (1-{len(hotels)})")], context
+        response = f"{options}\n\nWhich would you like? (1-{len(hotels)})"
+        speak_response(response)
+        return chat_history + [(user_input, response)], context
     
     # Handle flight booking flow
     elif any(k in user_input.lower() for k in ["flight", "fly", "airline"]):
@@ -405,11 +462,15 @@ def handle_flow(user_input, chat_history, context):
         if not context.get('city'):
             context['awaiting_city'] = True
             context['intent'] = 'flight'
-            return chat_history + [(user_input, "Which city would you like to fly to?")], context
+            response = "Which city would you like to fly to?"
+            speak_response(response)
+            return chat_history + [(user_input, response)], context
         
         flights = get_flight_options(context['city'])
         if not flights:
-            return chat_history + [(user_input, f"Sorry, no flights available to {context['city']}")], context
+            response = f"Sorry, no flights available to {context['city']}"
+            speak_response(response)
+            return chat_history + [(user_input, response)], context
         
         context.update({
             'flights': flights,
@@ -417,7 +478,9 @@ def handle_flow(user_input, chat_history, context):
             'booking_type': 'flight'
         })
         options = list_options(flights, "flight", context['city'])
-        return chat_history + [(user_input, f"{options}\n\nWhich would you like? (1-{len(flights)})")], context
+        response = f"{options}\n\nWhich would you like? (1-{len(flights)})"
+        speak_response(response)
+        return chat_history + [(user_input, response)], context
     
     # Handle selection of a hotel or flight
     elif context.get('awaiting_selection'):
@@ -433,21 +496,31 @@ def handle_flow(user_input, chat_history, context):
             })
             price = selected.get('price', '$0')
             item_name = selected.get('name', selected.get('airline'))
-            return chat_history + [(user_input, f"Selected: {item_name} for {price}\n\nConfirm booking? (yes/no)")], context
+            response = f"Selected: {item_name} for {price}\n\nConfirm booking? (yes/no)"
+            speak_response(response)
+            return chat_history + [(user_input, response)], context
         
-        return chat_history + [(user_input, f"Please select a number between 1-{len(items)}")], context
+        response = f"Please select a number between 1-{len(items)}"
+        speak_response(response)
+        return chat_history + [(user_input, response)], context
     
     # Handle booking confirmation
     elif context.get('awaiting_confirmation'):
         if any(yes_word in user_input.lower() for yes_word in POSITIVE_WORDS):
             context['awaiting_name'] = True
             context.pop('awaiting_confirmation', None)
-            return chat_history + [(user_input, "Please provide your full name:")], context
+            response = "Please provide your full name:"
+            speak_response(response)
+            return chat_history + [(user_input, response)], context
         elif any(neg_word in user_input.lower() for neg_word in NEGATIVE_WORDS):
             context.clear()
-            return chat_history + [(user_input, "Booking cancelled. How else can I help?")], context
+            response = "Booking cancelled. How else can I help?"
+            speak_response(response)
+            return chat_history + [(user_input, response)], context
         else:
-            return chat_history + [(user_input, "Please respond with 'yes' or 'no' to confirm booking")], context
+            response = "Please respond with 'yes' or 'no' to confirm booking"
+            speak_response(response)
+            return chat_history + [(user_input, response)], context
     
     # Handle name collection for booking
     elif context.get('awaiting_name'):
@@ -455,6 +528,7 @@ def handle_flow(user_input, chat_history, context):
             # Ensure we have all required context
             if 'selected_item' not in context or 'city' not in context or 'booking_type' not in context:
                 error_msg = "Booking failed due to missing information. Please start over."
+                speak_response(error_msg)
                 return chat_history + [(user_input, error_msg)], {}
             
             booking = {
@@ -483,10 +557,12 @@ def handle_flow(user_input, chat_history, context):
                 })
             
             result = save_booking(booking)
+            speak_response("Booking confirmed! Thank you for choosing our service.")
             # Return response and clear context
             return chat_history + [(user_input, result)], {}
         except Exception as e:
             error_msg = f"Error creating booking: {str(e)}"
+            speak_response(error_msg)
             return chat_history + [(user_input, error_msg)], {}
     
     # Handle city input
@@ -505,7 +581,9 @@ def handle_flow(user_input, chat_history, context):
                 return handle_flow("show attractions", chat_history, context)
             elif intent == 'weather':
                 return handle_flow("weather", chat_history, context)
-        return chat_history + [(user_input, "Sorry, I didn't get that. Please provide a valid city name.")], context
+        response = "Sorry, I didn't get that. Please provide a valid city name."
+        speak_response(response)
+        return chat_history + [(user_input, response)], context
     
     # Handle attractions query
     elif any(k in user_input.lower() for k in ["attractions", "places", "sightseeing", "what to see", "things to do"]):
@@ -513,21 +591,29 @@ def handle_flow(user_input, chat_history, context):
         if not city:
             context['awaiting_city'] = True
             context['intent'] = 'attractions'
-            return chat_history + [(user_input, "Which city would you like attraction information for?")], context
+            response = "Which city would you like attraction information for?"
+            speak_response(response)
+            return chat_history + [(user_input, response)], context
         
         attractions = get_top_attractions(city)
         if not attractions:
-            return chat_history + [(user_input, f"Sorry, no attraction information for {city}")], context
+            response = f"Sorry, no attraction information for {city}"
+            speak_response(response)
+            return chat_history + [(user_input, response)], context
         
         context['city'] = city
         attractions_list = "\n- " + "\n- ".join(attractions)
-        return chat_history + [(user_input, f"Top attractions in {city}:{attractions_list}")], context
+        response = f"Top attractions in {city}:{attractions_list}"
+        speak_response(response)
+        return chat_history + [(user_input, response)], context
     
     # Handle bookings query
     elif any(k in user_input.lower() for k in ["bookings", "reservations", "my trips"]):
         bookings = load_bookings()
         if not bookings:
-            return chat_history + [(user_input, "You have no bookings yet.")], context
+            response = "You have no bookings yet."
+            speak_response(response)
+            return chat_history + [(user_input, response)], context
         
         booking_list = []
         for i, b in enumerate(bookings, 1):
@@ -548,11 +634,13 @@ def handle_flow(user_input, chat_history, context):
                 price = b.get('price', '?')
                 booking_list.append(f"{i}. ✈️ ID: {booking_id} | {user_name}: {airline} to {destination} ({price})")
         
-        return chat_history + [(user_input, "Your bookings:\n" + "\n".join(booking_list))], context
+        response = "Your bookings:\n" + "\n".join(booking_list)
+        speak_response(response)
+        return chat_history + [(user_input, response)], context
     
     # Default response for other queries
     else:
-        return chat_history + [(user_input, """I can help with:
+        response = """I can help with:
 - Booking hotels 🏨
 - Finding flights ✈️
 - Local attractions 🏛️
@@ -564,13 +652,33 @@ For example:
 "Show flights to Tokyo"
 "What's the weather in London?"
 "Top attractions in New York"
-"View my bookings".""")], context
+"View my bookings"."""
+        speak_response(response)
+        return chat_history + [(user_input, response)], context
 
-def handle_voice(chat_history, context):
-    user_input = ui_listen()
-    if not user_input:
-        return chat_history + [("", "Sorry, I didn't catch that. Please try again.")], context
-    return handle_flow(user_input, chat_history, context)
+def handle_voice(chat_history, context, status):
+    status = "🎤 Listening... Speak now"
+    yield chat_history, context, status
+    
+    try:
+        user_input = ui_listen()
+        if not user_input:
+            response = "Sorry, I didn't catch that. Please try again."
+            speak_response(response)
+            status = "❌ Listening failed"
+            yield chat_history + [("", response)], context, status
+            return
+        
+        status = "🔍 Processing..."
+        yield chat_history + [("", user_input)], context, status
+        
+        new_history, new_context = handle_flow(user_input, chat_history, context)
+        status = "✅ Ready"
+        yield new_history, new_context, status
+    except Exception as e:
+        print(f"Voice handling error: {e}")
+        status = "❌ Error occurred"
+        yield chat_history, context, status
 
 def handle_text(user_input, chat_history, context):
     if not user_input.strip():
@@ -578,11 +686,10 @@ def handle_text(user_input, chat_history, context):
     new_history, new_context = handle_flow(user_input, chat_history, context)
     return new_history, "", new_context
 
-def speak_response(chat_history):
+def speak_last_response(chat_history):
     if chat_history:
         last_response = chat_history[-1][1]
-        engine.say(last_response)
-        engine.runAndWait()
+        speak_response(last_response)
 
 def get_current_time():
     return datetime.now().strftime("%H:%M")
@@ -869,6 +976,42 @@ body {
     color: #e2e8f0;
 }
 
+.voice-status {
+    padding: 8px 16px;
+    border-radius: 50px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    margin-top: 10px;
+    text-align: center;
+}
+
+.listening {
+    background: rgba(56, 189, 248, 0.2);
+    color: #38bdf8;
+    animation: pulse 1.5s infinite;
+}
+
+.processing {
+    background: rgba(245, 158, 11, 0.2);
+    color: #f59e0b;
+}
+
+.ready {
+    background: rgba(16, 185, 129, 0.2);
+    color: #10b981;
+}
+
+.error {
+    background: rgba(239, 68, 68, 0.2);
+    color: #ef4444;
+}
+
+@keyframes pulse {
+    0% { opacity: 0.6; }
+    50% { opacity: 1; }
+    100% { opacity: 0.6; }
+}
+
 @media (max-width: 768px) {
     .feature-button {
         width: calc(50% - 15px) !important;
@@ -961,6 +1104,14 @@ with gr.Blocks(title="✈️ Travel Assistant", theme=gr.themes.Soft(), css=copi
             clear_btn = gr.Button("🧹 Clear Chat", variant="secondary", elem_classes="gradio-button secondary-button")
             restart_btn = gr.Button("🔄 Restart", variant="secondary", elem_classes="gradio-button secondary-button")
             bookings_btn = gr.Button("📋 My Bookings", variant="secondary", elem_classes="gradio-button dark-button")
+        
+        # Voice status indicator
+        voice_status = gr.Textbox(
+            value="✅ Ready",
+            label="Status",
+            interactive=False,
+            elem_classes="voice-status ready"
+        )
     
     # Examples Section
     with gr.Column(elem_classes="examples-container"):
@@ -982,8 +1133,8 @@ with gr.Blocks(title="✈️ Travel Assistant", theme=gr.themes.Soft(), css=copi
     # Event Handling
     voice_btn.click(
         handle_voice,
-        inputs=[chatbot, context_state],
-        outputs=[chatbot, context_state]
+        inputs=[chatbot, context_state, voice_status],
+        outputs=[chatbot, context_state, voice_status]
     )
     
     text_input.submit(
@@ -999,27 +1150,27 @@ with gr.Blocks(title="✈️ Travel Assistant", theme=gr.themes.Soft(), css=copi
     )
     
     speak_btn.click(
-        speak_response,
+        speak_last_response,
         inputs=[chatbot],
         outputs=[]
     )
     
     clear_btn.click(
-        fn=lambda: ([], {}, ""),
+        fn=lambda: ([], {}, "", "✅ Ready"),
         inputs=[],
-        outputs=[chatbot, context_state, text_input]
+        outputs=[chatbot, context_state, text_input, voice_status]
     )
     
     restart_btn.click(
-        fn=lambda: ([], {}, ""),
+        fn=lambda: ([], {}, "", "✅ Ready"),
         inputs=[],
-        outputs=[chatbot, context_state, text_input]
+        outputs=[chatbot, context_state, text_input, voice_status]
     )
     
     bookings_btn.click(
-        fn=lambda: ("show my bookings", [], {}),
+        fn=lambda: ("show my bookings", [], {}, "✅ Ready"),
         inputs=[],
-        outputs=[text_input, chatbot, context_state]
+        outputs=[text_input, chatbot, context_state, voice_status]
     ).then(
         handle_text,
         inputs=[text_input, chatbot, context_state],
@@ -1028,9 +1179,9 @@ with gr.Blocks(title="✈️ Travel Assistant", theme=gr.themes.Soft(), css=copi
     
     # Feature card click handlers
     hotels_btn.click(
-        fn=lambda: ("book hotel", [], {}),
+        fn=lambda: ("book hotel", [], {}, "✅ Ready"),
         inputs=[],
-        outputs=[text_input, chatbot, context_state]
+        outputs=[text_input, chatbot, context_state, voice_status]
     ).then(
         handle_text,
         inputs=[text_input, chatbot, context_state],
@@ -1038,9 +1189,9 @@ with gr.Blocks(title="✈️ Travel Assistant", theme=gr.themes.Soft(), css=copi
     )
     
     flights_btn.click(
-        fn=lambda: ("book flight", [], {}),
+        fn=lambda: ("book flight", [], {}, "✅ Ready"),
         inputs=[],
-        outputs=[text_input, chatbot, context_state]
+        outputs=[text_input, chatbot, context_state, voice_status]
     ).then(
         handle_text,
         inputs=[text_input, chatbot, context_state],
@@ -1048,9 +1199,9 @@ with gr.Blocks(title="✈️ Travel Assistant", theme=gr.themes.Soft(), css=copi
     )
     
     weather_btn.click(
-        fn=lambda: ("weather", [], {}),
+        fn=lambda: ("weather", [], {}, "✅ Ready"),
         inputs=[],
-        outputs=[text_input, chatbot, context_state]
+        outputs=[text_input, chatbot, context_state, voice_status]
     ).then(
         handle_text,
         inputs=[text_input, chatbot, context_state],
@@ -1058,9 +1209,9 @@ with gr.Blocks(title="✈️ Travel Assistant", theme=gr.themes.Soft(), css=copi
     )
     
     attractions_btn.click(
-        fn=lambda: ("show attractions", [], {}),
+        fn=lambda: ("show attractions", [], {}, "✅ Ready"),
         inputs=[],
-        outputs=[text_input, chatbot, context_state]
+        outputs=[text_input, chatbot, context_state, voice_status]
     ).then(
         handle_text,
         inputs=[text_input, chatbot, context_state],
@@ -1069,9 +1220,9 @@ with gr.Blocks(title="✈️ Travel Assistant", theme=gr.themes.Soft(), css=copi
     
     # Example pill click handlers
     example1.click(
-        fn=lambda: ("Book a hotel in Tokyo", [], {}),
+        fn=lambda: ("Book a hotel in Tokyo", [], {}, "✅ Ready"),
         inputs=[],
-        outputs=[text_input, chatbot, context_state]
+        outputs=[text_input, chatbot, context_state, voice_status]
     ).then(
         handle_text,
         inputs=[text_input, chatbot, context_state],
@@ -1079,9 +1230,9 @@ with gr.Blocks(title="✈️ Travel Assistant", theme=gr.themes.Soft(), css=copi
     )
     
     example2.click(
-        fn=lambda: ("Show flights to Paris", [], {}),
+        fn=lambda: ("Show flights to Paris", [], {}, "✅ Ready"),
         inputs=[],
-        outputs=[text_input, chatbot, context_state]
+        outputs=[text_input, chatbot, context_state, voice_status]
     ).then(
         handle_text,
         inputs=[text_input, chatbot, context_state],
@@ -1089,9 +1240,9 @@ with gr.Blocks(title="✈️ Travel Assistant", theme=gr.themes.Soft(), css=copi
     )
     
     example3.click(
-        fn=lambda: ("What's the weather in London?", [], {}),
+        fn=lambda: ("What's the weather in London?", [], {}, "✅ Ready"),
         inputs=[],
-        outputs=[text_input, chatbot, context_state]
+        outputs=[text_input, chatbot, context_state, voice_status]
     ).then(
         handle_text,
         inputs=[text_input, chatbot, context_state],
@@ -1099,9 +1250,9 @@ with gr.Blocks(title="✈️ Travel Assistant", theme=gr.themes.Soft(), css=copi
     )
     
     example4.click(
-        fn=lambda: ("Top attractions in New York", [], {}),
+        fn=lambda: ("Top attractions in New York", [], {}, "✅ Ready"),
         inputs=[],
-        outputs=[text_input, chatbot, context_state]
+        outputs=[text_input, chatbot, context_state, voice_status]
     ).then(
         handle_text,
         inputs=[text_input, chatbot, context_state],
@@ -1109,9 +1260,9 @@ with gr.Blocks(title="✈️ Travel Assistant", theme=gr.themes.Soft(), css=copi
     )
     
     example5.click(
-        fn=lambda: ("Find a luxury hotel in Dubai", [], {}),
+        fn=lambda: ("Find a luxury hotel in Dubai", [], {}, "✅ Ready"),
         inputs=[],
-        outputs=[text_input, chatbot, context_state]
+        outputs=[text_input, chatbot, context_state, voice_status]
     ).then(
         handle_text,
         inputs=[text_input, chatbot, context_state],
